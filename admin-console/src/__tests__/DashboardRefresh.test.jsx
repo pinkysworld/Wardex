@@ -243,7 +243,7 @@ describe('Dashboard refresh', () => {
     expect(screen.getByText('Alert Pressure Forecast')).toBeInTheDocument();
     expect(screen.getByText('Next shift projection')).toBeInTheDocument();
     expect(screen.getByText('SLA backlog clear ETA')).toBeInTheDocument();
-    const refreshButton = await screen.findByRole('button', { name: '↻ Refresh' });
+    const refreshButton = await screen.findByRole('button', { name: 'Refresh' });
     expect(await screen.findByText('Collector Health')).toBeInTheDocument();
     expect(screen.getByText('Readiness timeline')).toBeInTheDocument();
     expect(screen.getByText('Collector enabled')).toBeInTheDocument();

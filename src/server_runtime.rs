@@ -120,9 +120,29 @@ pub async fn run_server(
     let storage = SharedStorage::open("var/storage")
         .or_else(|_| SharedStorage::open("/tmp/wardex_storage"))
         .map_err(|e| format!("failed to initialise storage: {e}"))?;
+
+    let bootstrap_event_store = EventStore::with_persistence(10_000, "var/events.json");
+    let search_seed: Vec<HashMap<String, String>> = bootstrap_event_store
+        .all_events()
+        .iter()
+        .map(event_to_search_fields)
+        .collect();
+    let search_index = Arc::new(
+        crate::search::PersistentEventStore::open(initial_config.search.clone(), &search_seed)
+            .map_err(|e| format!("failed to initialise search index: {e}"))?,
+    );
     let failed_auth_snapshot: crate::server_auth::FailedAuthSnapshot =
         load_stored_json(&storage, FAILED_AUTH_TRACKER_STORAGE_KEY);
     crate::server_auth::failed_auth_restore_snapshot(failed_auth_snapshot);
+
+    // Restore a previously trained Random Forest triage model, if any, so a
+    // restart does not silently revert to the pretrained cold-start forest.
+    let persisted_random_forest: Option<crate::ml_engine::PersistedForestSnapshot> =
+        load_stored_json(&storage, crate::server_ml::RF_MODEL_STORAGE_KEY);
+    let mut model_registry = crate::ml_engine::ModelRegistry::new(&model_registry_dir);
+    if let Some(snapshot) = persisted_random_forest {
+        model_registry.import_random_forest_snapshot(snapshot);
+    }
 
     let state = Arc::new(Mutex::new(AppState {
         detector: AnomalyDetector::default(),
@@ -149,6 +169,9 @@ pub async fn run_server(
         key_rotation: KeyRotationManager::new(3600),
         privacy: PrivacyAccountant::new(10.0),
         policy_vm: PolicyVm::default(),
+        wasm_extensions: crate::wasm_runtime::WasmExtensionManager::new(
+            initial_config.wasm_runtime.clone(),
+        ),
         fingerprint: None,
         monitor: Monitor::new(),
         drift: DriftDetector::new(0.005, 50.0),
@@ -171,7 +194,8 @@ pub async fn run_server(
         alerts: VecDeque::new(),
         server_start: std::time::Instant::now(),
         agent_registry: AgentRegistry::new("var/agents.json"),
-        event_store: EventStore::with_persistence(10_000, "var/events.json"),
+        event_store: bootstrap_event_store,
+        search_index,
         clickhouse_store: initial_config.clickhouse.as_ref().map(|cfg| {
             log::info!(
                 "[STORAGE] ClickHouse backend enabled: {}/{}",
@@ -230,7 +254,11 @@ pub async fn run_server(
         kernel_event_stream: crate::kernel_events::KernelEventStream::new(10_000),
         last_alert_analysis: None,
         storage: storage.clone(),
-        slow_attack: crate::detector::SlowAttackDetector::default(),
+        slow_attack: crate::detector::SlowAttackDetector::new(
+            initial_config
+                .detection
+                .slow_attack_config(initial_config.collection.collection_interval_secs),
+        ),
         ransomware: crate::ransomware::RansomwareDetector::default(),
         mitre_coverage: crate::mitre_coverage::MitreCoverageTracker::new(),
         tuning_profile: crate::detector::TuningProfile::default(),
@@ -244,7 +272,7 @@ pub async fn run_server(
         efficacy_tracker: crate::detection_efficacy::EfficacyTracker::new(100_000),
         workflow_store: crate::investigation::WorkflowStore::new(),
         llm_analyst: Arc::new(Mutex::new(load_llm_analyst_from_env())),
-        model_registry: crate::ml_engine::ModelRegistry::new(&model_registry_dir),
+        model_registry,
         detection_feedback: crate::detection_feedback::DetectionFeedbackStore::new(
             &detection_feedback_path,
         ),
@@ -264,16 +292,49 @@ pub async fn run_server(
         dns_analyzer: crate::dns_threat::DnsAnalyzer::new(),
         alert_broadcaster: crate::ws_stream::AlertBroadcaster::new(),
         extra: HashMap::new(),
+        federation: crate::federated::FederationCoordinator::new(
+            crate::federated::FederationConfig::default(),
+            FEDERATION_PARAM_DIM,
+        ),
     }));
 
     // Apply loaded config
     let shutdown_timeout_secs = initial_config.server.shutdown_timeout_secs;
+    let federation_config = initial_config.federation.clone();
 
     {
         let mut s = crate::state_lock::tracked_lock(&state, "server/run_initial_config_apply");
         s.config = initial_config;
         let effective_rules = s.enterprise.effective_sigma_rules();
         s.sigma_engine.replace_rules(effective_rules);
+        // Restore any federation round/model/budget state persisted from a
+        // previous run; fall back to a fresh coordinator seeded with the
+        // loaded config otherwise.
+        let stored: Option<crate::federated::FederationCoordinator> =
+            load_stored_json(&s.storage, FEDERATION_STATE_STORAGE_KEY);
+        s.federation = stored.unwrap_or_else(|| {
+            crate::federated::FederationCoordinator::new(federation_config, FEDERATION_PARAM_DIM)
+        });
+    }
+
+    // Load WebAssembly extensions from the configured directory, if enabled.
+    {
+        let s = crate::state_lock::tracked_lock(&state, "server/run_wasm_extensions_load");
+        match s.wasm_extensions.load_dir() {
+            Ok(loaded) if !loaded.is_empty() => {
+                tracing::info!(
+                    "loaded {} WebAssembly extension(s): {}",
+                    loaded.len(),
+                    loaded
+                        .iter()
+                        .map(|o| o.name.as_str())
+                        .collect::<Vec<_>>()
+                        .join(", ")
+                );
+            }
+            Ok(_) => {}
+            Err(e) => tracing::warn!("failed to load WebAssembly extensions: {e}"),
+        }
     }
 
     // Load community YARA malware rules
@@ -292,6 +353,23 @@ pub async fn run_server(
         }
     }
 
+    // Load genuine `.yar` source rules from rules/yara/ (see
+    // `crate::yara_parser` and `docs/YARA_COMPATIBILITY.md`). JSON rule
+    // files in the same directory (handled above / by any other loader)
+    // remain fully supported side by side.
+    {
+        let mut s = state
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
+        let (n, messages) = s.yara_engine.load_rules_dir("rules/yara");
+        if n > 0 {
+            tracing::info!("loaded {n} rule(s) from rules/yara/*.yar");
+        }
+        for message in messages {
+            tracing::warn!("rules/yara: {message}");
+        }
+    }
+
     // Load local open-source AV hash signatures by default when present.
     // Operators opt in by placing ClamAV-style .hdb/.hsb files in preset
     // directories; Wardex does not redistribute or auto-download databases.
@@ -304,6 +382,11 @@ pub async fn run_server(
     spawn_retention_purge_scheduler(&state);
     crate::server_cluster::spawn_cluster_runtime_loop(&state);
     spawn_feed_ingestion_loop(&state);
+    spawn_okta_identity_poll_loop(&state);
+    spawn_linux_kernel_telemetry(&state);
+    spawn_container_runtime_loop(&state);
+    spawn_windows_kernel_telemetry(&state);
+    spawn_macos_kernel_telemetry(&state);
 
     // ── Spawn local host monitoring thread ──────────────────────────
     {
@@ -701,6 +784,7 @@ pub(crate) fn spawn_test_server_with_state() -> (u16, String, Arc<Mutex<AppState
     let user_preferences = UserPreferencesStore::new(&user_preferences_store_path(&config_path));
     let model_registry_dir = model_registry_path(&config_path);
     let detection_feedback_path = detection_feedback_store_path(&config_path);
+    let test_federation_config = test_config.federation.clone();
     let state = Arc::new(Mutex::new(AppState {
         detector: AnomalyDetector::default(),
         checkpoints: CheckpointStore::new(10),
@@ -726,6 +810,9 @@ pub(crate) fn spawn_test_server_with_state() -> (u16, String, Arc<Mutex<AppState
         key_rotation: KeyRotationManager::new(3600),
         privacy: PrivacyAccountant::new(10.0),
         policy_vm: PolicyVm::default(),
+        wasm_extensions: crate::wasm_runtime::WasmExtensionManager::new(
+            test_config.wasm_runtime.clone(),
+        ),
         fingerprint: None,
         monitor: Monitor::new(),
         drift: DriftDetector::new(0.005, 50.0),
@@ -741,6 +828,19 @@ pub(crate) fn spawn_test_server_with_state() -> (u16, String, Arc<Mutex<AppState
         event_store: EventStore::with_persistence(
             1000,
             state_root.join("events.json").to_string_lossy().to_string(),
+        ),
+        search_index: Arc::new(
+            crate::search::PersistentEventStore::open(
+                crate::search::EventStoreConfig {
+                    index_path: state_root
+                        .join("search_index")
+                        .to_string_lossy()
+                        .to_string(),
+                    ..Default::default()
+                },
+                &[],
+            )
+            .expect("test search index"),
         ),
         clickhouse_store: None,
         policy_store: PolicyStore::new(),
@@ -835,6 +935,10 @@ pub(crate) fn spawn_test_server_with_state() -> (u16, String, Arc<Mutex<AppState
         dns_analyzer: crate::dns_threat::DnsAnalyzer::new(),
         alert_broadcaster: crate::ws_stream::AlertBroadcaster::new(),
         extra: HashMap::new(),
+        federation: crate::federated::FederationCoordinator::new(
+            test_federation_config,
+            FEDERATION_PARAM_DIM,
+        ),
     }));
     {
         let mut s = crate::state_lock::tracked_lock(&state, "server/spawn_enterprise_rules_apply");
@@ -1093,3 +1197,119 @@ fn flush_to_storage(state: &Arc<Mutex<AppState>>) {
         "Shutdown flush: {stored} alerts, {audit_stored} audit entries, {event_stored} events written to storage ({errors} errors)",
     );
 }
+
+/// Start real, kernel-driven Linux telemetry (CN_PROC netlink process
+/// connector, fanotify/inotify file events) feeding the shared
+/// `kernel_event_stream`, degrading to the existing /proc-polling collector
+/// per-domain when a backend can't be opened. See `src/kernel_linux/`.
+///
+/// This augments, rather than replaces, the periodic `/proc`/`/sys`
+/// collector thread spawned below: that thread still drives snapshot-based
+/// findings (SUID scans, privilege escalation indicators, socket tables),
+/// while this one adds real-time, kernel-pushed process/file events into
+/// `kernel_event_stream`.
+#[cfg(target_os = "linux")]
+fn spawn_linux_kernel_telemetry(state: &Arc<Mutex<AppState>>) {
+    let (stream, hostname, agent_uid, watch_paths) = {
+        let s = state
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
+        (
+            s.kernel_event_stream.clone(),
+            s.local_host_info.hostname.clone(),
+            s.config.agent.agent_id.clone(),
+            s.config.monitor.watch_paths.clone(),
+        )
+    };
+    let handle = crate::kernel_linux::spawn(stream, hostname, agent_uid, watch_paths);
+    log::info!(
+        "kernel_linux: telemetry backends selected — {}",
+        handle.capability.summary()
+    );
+    if handle.capability.fully_degraded() {
+        log::warn!(
+            "kernel_linux: no kernel-pushed event source is active; all Linux telemetry is \
+             /proc-polling only. Grant CAP_NET_ADMIN (process events) and CAP_SYS_ADMIN or \
+             inotify access (file events) for real-time telemetry."
+        );
+    }
+    // Dropping `handle` here does not stop its backend threads — a
+    // `JoinHandle`'s `Drop` only detaches, it never joins — so they keep
+    // running for the life of the process, matching every other spawn_*
+    // collector loop in this file.
+    drop(handle);
+}
+
+#[cfg(not(target_os = "linux"))]
+fn spawn_linux_kernel_telemetry(_state: &Arc<Mutex<AppState>>) {}
+
+/// Start the real-time ETW telemetry consumer on Windows, degrading to the
+/// existing WMI/PowerShell polling collector in `collector_windows.rs`
+/// when not elevated. See `src/kernel_windows/`.
+#[cfg(windows)]
+fn spawn_windows_kernel_telemetry(state: &Arc<Mutex<AppState>>) {
+    let (stream, hostname, agent_uid, options) = {
+        let s = state
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
+        let options = crate::kernel_windows::WindowsTelemetryOptions {
+            etw: s.config.collectors.etw_enabled,
+            amsi_etw: s.config.collectors.etw_enabled && s.config.collectors.amsi_enabled,
+            ..Default::default()
+        };
+        (
+            s.kernel_event_stream.clone(),
+            s.local_host_info.hostname.clone(),
+            s.config.agent.agent_id.clone(),
+            options,
+        )
+    };
+    let handle = crate::kernel_windows::spawn(stream, hostname, agent_uid, options);
+    log::info!(
+        "kernel_windows: telemetry backend selected — {}",
+        handle.capability.summary()
+    );
+    // Unlike `kernel_linux`'s handle, `WindowsTelemetryHandle` owns the
+    // live ETW session (`ferrisetw::trace::UserTrace` stops tracing on
+    // `Drop`) — so, unlike the plain `drop(handle)` used for the Linux and
+    // macOS backends below, this one is deliberately never dropped. It
+    // must outlive this function call for telemetry to keep flowing for
+    // the life of the process; `mem::forget` documents that intent instead
+    // of leaving a `Box::leak`'d value with no clear owner.
+    std::mem::forget(handle);
+}
+
+#[cfg(not(windows))]
+fn spawn_windows_kernel_telemetry(_state: &Arc<Mutex<AppState>>) {}
+
+/// Start a real Endpoint Security client on macOS when built with the
+/// `macos-es` feature and entitled to do so, degrading to the existing
+/// `ps`/`lsof` polling collector in `collector_macos.rs` otherwise. See
+/// `src/kernel_macos/`.
+#[cfg(target_os = "macos")]
+fn spawn_macos_kernel_telemetry(state: &Arc<Mutex<AppState>>) {
+    let (stream, hostname, agent_uid) = {
+        let s = state
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
+        (
+            s.kernel_event_stream.clone(),
+            s.local_host_info.hostname.clone(),
+            s.config.agent.agent_id.clone(),
+        )
+    };
+    let handle = crate::kernel_macos::spawn(
+        stream,
+        hostname,
+        agent_uid,
+        crate::kernel_macos::MacosTelemetryOptions::default(),
+    );
+    log::info!(
+        "kernel_macos: telemetry backend selected — {}",
+        handle.capability.summary()
+    );
+    drop(handle);
+}
+
+#[cfg(not(target_os = "macos"))]
+fn spawn_macos_kernel_telemetry(_state: &Arc<Mutex<AppState>>) {}

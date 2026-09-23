@@ -1,4 +1,4 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { act, render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { MemoryRouter, useLocation } from 'react-router-dom';
@@ -679,6 +679,127 @@ describe('App', () => {
 
     await waitFor(() => expect(writeText).toHaveBeenCalledTimes(1));
     await waitFor(() => expect(execCommand).toHaveBeenCalledWith('copy'));
-    expect(screen.getByRole('button', { name: 'Copied' })).toBeInTheDocument();
+
+    await userEvent.click(screen.getByRole('button', { name: 'More' }));
+    expect(screen.getByRole('menuitem', { name: 'Copied' })).toBeInTheDocument();
+  });
+
+  describe('topbar overflow menu dismissal', () => {
+    async function renderAuthenticated(route = '/detection') {
+      localStorage.setItem('wardex_token', 'persisted-token');
+      fetchMock.mockImplementation(async (url) => ({
+        ok: true,
+        headers: { get: () => 'application/json' },
+        json: async () => {
+          if (url === '/api/auth/session') {
+            return { authenticated: true, role: 'admin', username: 'tester' };
+          }
+          return {};
+        },
+      }));
+      return renderApp(route);
+    }
+
+    it('closes on Escape and returns focus to the "More" trigger', async () => {
+      await renderAuthenticated();
+      const trigger = await screen.findByRole('button', { name: 'More' });
+      await userEvent.click(trigger);
+      expect(screen.getByRole('menu', { name: 'More actions' })).toBeInTheDocument();
+
+      await userEvent.keyboard('{Escape}');
+
+      expect(screen.queryByRole('menu', { name: 'More actions' })).not.toBeInTheDocument();
+      expect(trigger).toHaveFocus();
+    });
+
+    it('closes when clicking outside the menu', async () => {
+      await renderAuthenticated();
+      await userEvent.click(await screen.findByRole('button', { name: 'More' }));
+      expect(screen.getByRole('menu', { name: 'More actions' })).toBeInTheDocument();
+
+      await userEvent.click(document.body);
+
+      expect(screen.queryByRole('menu', { name: 'More actions' })).not.toBeInTheDocument();
+    });
+
+    it('closes when navigating to a different route via the sidebar', async () => {
+      await renderAuthenticated();
+      await userEvent.click(await screen.findByRole('button', { name: 'More' }));
+      expect(screen.getByRole('menu', { name: 'More actions' })).toBeInTheDocument();
+
+      await userEvent.click(screen.getByRole('link', { name: 'Settings' }));
+
+      expect(screen.queryByRole('menu', { name: 'More actions' })).not.toBeInTheDocument();
+    });
+  });
+
+  describe('topbar secondary actions at wide viewports', () => {
+    const originalInnerWidth = window.innerWidth;
+
+    afterEach(() => {
+      Object.defineProperty(window, 'innerWidth', {
+        configurable: true,
+        writable: true,
+        value: originalInnerWidth,
+      });
+      window.dispatchEvent(new Event('resize'));
+    });
+
+    it('renders Help For View and Share Link inline instead of behind "More"', async () => {
+      Object.defineProperty(window, 'innerWidth', {
+        configurable: true,
+        writable: true,
+        value: 1400,
+      });
+
+      localStorage.setItem('wardex_token', 'persisted-token');
+      fetchMock.mockImplementation(async (url) => ({
+        ok: true,
+        headers: { get: () => 'application/json' },
+        json: async () => {
+          if (url === '/api/auth/session') {
+            return { authenticated: true, role: 'admin', username: 'tester' };
+          }
+          return {};
+        },
+      }));
+
+      await renderApp('/detection');
+
+      expect(await screen.findByRole('button', { name: 'Share Link' })).toBeInTheDocument();
+      expect(screen.getByRole('button', { name: /Help For View/ })).toBeInTheDocument();
+      expect(screen.queryByRole('button', { name: 'More' })).not.toBeInTheDocument();
+    });
+
+    it('moves Search and Pin View into the "More" menu at phone width', async () => {
+      Object.defineProperty(window, 'innerWidth', {
+        configurable: true,
+        writable: true,
+        value: 390,
+      });
+
+      localStorage.setItem('wardex_token', 'persisted-token');
+      fetchMock.mockImplementation(async (url) => ({
+        ok: true,
+        headers: { get: () => 'application/json' },
+        json: async () => {
+          if (url === '/api/auth/session') {
+            return { authenticated: true, role: 'admin', username: 'tester' };
+          }
+          return {};
+        },
+      }));
+
+      await renderApp('/detection');
+
+      await userEvent.click(await screen.findByRole('button', { name: 'More' }));
+      const menu = screen.getByRole('menu', { name: 'More actions' });
+      for (const name of ['Search', 'Help For View', 'Share Link', 'Pin View']) {
+        expect(within(menu).getByRole('menuitem', { name })).toBeInTheDocument();
+      }
+      expect(
+        screen.queryByRole('button', { name: 'Open global search (Ctrl/Cmd K)' }),
+      ).not.toBeInTheDocument();
+    });
   });
 });

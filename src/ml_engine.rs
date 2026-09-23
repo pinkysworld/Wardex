@@ -152,9 +152,13 @@ pub struct RandomForest {
 }
 
 impl RandomForest {
-    /// Build a hardcoded 5-tree forest trained on historical alert data.
-    /// Each tree uses different feature subsets and thresholds learned
-    /// from labelled TP/FP/Review data.
+    /// Cold-start fallback: a hand-tuned 5-tree forest with fixed
+    /// thresholds, used only until enough analyst-labelled data exists to
+    /// run [`RandomForest::train`] (see
+    /// [`ModelRegistry::train_random_forest`] and
+    /// [`DEFAULT_MIN_TRAINING_SAMPLES`]). It is never re-fitted from data —
+    /// once real training data clears the minimum-sample bar, the trained
+    /// forest replaces it.
     pub fn pretrained() -> Self {
         use TriageLabel::*;
         let trees = vec![
@@ -479,6 +483,429 @@ fn triage_label_str(label: TriageLabel) -> &'static str {
         TriageLabel::FalsePositive => "false_positive",
         TriageLabel::NeedsReview => "needs_review",
     }
+}
+
+fn label_idx(label: TriageLabel) -> usize {
+    match label {
+        TriageLabel::FalsePositive => 0,
+        TriageLabel::NeedsReview => 1,
+        TriageLabel::TruePositive => 2,
+    }
+}
+
+fn idx_label(idx: usize) -> TriageLabel {
+    match idx {
+        0 => TriageLabel::FalsePositive,
+        2 => TriageLabel::TruePositive,
+        _ => TriageLabel::NeedsReview,
+    }
+}
+
+// ── Real CART / bagged Random Forest training ─────────────────────────
+//
+// `RandomForest::pretrained()` above is the cold-start fallback used before
+// any analyst verdicts exist (or when too few are available). The types and
+// functions below implement genuine training: Gini-impurity CART induction
+// with feature subsampling, bagged over bootstrap samples, evaluated
+// out-of-bag. Training is deterministic for a given seed so runs are
+// reproducible and comparable across retraining cycles.
+
+/// A single labelled training example: a feature vector (see
+/// [`TriageFeatures::to_vec`]) paired with the label an analyst confirmed.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct TrainingExample {
+    pub features: Vec<f64>,
+    pub label: TriageLabel,
+}
+
+/// Small deterministic linear-congruential generator. Used for bootstrap
+/// resampling and feature subsampling so that training with a fixed seed
+/// always produces byte-identical trees.
+struct Lcg(u64);
+
+impl Lcg {
+    fn new(seed: u64) -> Self {
+        Self(seed ^ 0x9E37_79B9_7F4A_7C15)
+    }
+
+    fn next_u64(&mut self) -> u64 {
+        self.0 = self
+            .0
+            .wrapping_mul(6_364_136_223_846_793_005)
+            .wrapping_add(1_442_695_040_888_963_407);
+        self.0
+    }
+
+    /// Uniform integer in `[0, n)`. `n == 0` returns `0`.
+    fn gen_range(&mut self, n: usize) -> usize {
+        if n == 0 {
+            return 0;
+        }
+        (self.next_u64() % n as u64) as usize
+    }
+}
+
+/// Hyperparameters controlling CART tree induction.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct TreeTrainConfig {
+    pub max_depth: usize,
+    pub min_samples_split: usize,
+    pub min_samples_leaf: usize,
+    /// Number of features considered at each split. `0` means "all features"
+    /// (ordinary CART); a random subset is used otherwise, as in Random
+    /// Forest / bagging feature decorrelation.
+    pub max_features: usize,
+}
+
+impl Default for TreeTrainConfig {
+    fn default() -> Self {
+        Self {
+            max_depth: 6,
+            min_samples_split: 4,
+            min_samples_leaf: 2,
+            max_features: 0,
+        }
+    }
+}
+
+/// Hyperparameters for the bagged forest as a whole.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ForestTrainConfig {
+    pub n_trees: usize,
+    pub tree: TreeTrainConfig,
+    /// Deterministic seed: identical inputs + seed always produce an
+    /// identical forest.
+    pub seed: u64,
+}
+
+impl Default for ForestTrainConfig {
+    fn default() -> Self {
+        // sqrt(7) ≈ 2.6 → 3 features per split is the conventional Random
+        // Forest default for a 7-feature classification problem.
+        Self {
+            n_trees: 60,
+            tree: TreeTrainConfig {
+                max_features: 3,
+                ..TreeTrainConfig::default()
+            },
+            seed: 42,
+        }
+    }
+}
+
+fn gini(counts: &[usize; 3], total: usize) -> f64 {
+    if total == 0 {
+        return 0.0;
+    }
+    let t = total as f64;
+    1.0 - counts
+        .iter()
+        .map(|&c| {
+            let p = c as f64 / t;
+            p * p
+        })
+        .sum::<f64>()
+}
+
+/// Recursively build a CART node over `rows`, accumulating the Gini-based
+/// mean-decrease-in-impurity feature importance (weighted by node sample
+/// count) into `importance`.
+fn build_cart(
+    rows: &[usize],
+    xs: &[Vec<f64>],
+    ys: &[TriageLabel],
+    depth: usize,
+    cfg: &TreeTrainConfig,
+    rng: &mut Lcg,
+    importance: &mut [f64],
+) -> TreeNode {
+    let n_features = xs.first().map_or(0, Vec::len);
+    let mut counts = [0usize; 3];
+    for &r in rows {
+        counts[label_idx(ys[r])] += 1;
+    }
+    let total = rows.len();
+    let majority_idx = counts
+        .iter()
+        .enumerate()
+        .max_by_key(|&(_, &c)| c)
+        .map_or(1, |(i, _)| i);
+    let confidence = if total > 0 {
+        counts[majority_idx] as f64 / total as f64
+    } else {
+        1.0 / 3.0
+    };
+    let leaf = TreeNode::Leaf {
+        label: idx_label(majority_idx),
+        confidence,
+    };
+
+    if depth >= cfg.max_depth || total < cfg.min_samples_split || n_features == 0 {
+        return leaf;
+    }
+
+    // Feature subsampling: pick up to `max_features` distinct columns.
+    let mut candidate_features: Vec<usize> = (0..n_features).collect();
+    let k = if cfg.max_features == 0 || cfg.max_features >= n_features {
+        n_features
+    } else {
+        cfg.max_features
+    };
+    if k < n_features {
+        for i in 0..k {
+            let j = i + rng.gen_range(n_features - i);
+            candidate_features.swap(i, j);
+        }
+        candidate_features.truncate(k);
+    }
+
+    let parent_gini = gini(&counts, total);
+    // (feature, threshold, gain)
+    let mut best: Option<(usize, f64, f64)> = None;
+
+    for &feature in &candidate_features {
+        let mut sorted: Vec<usize> = rows.to_vec();
+        sorted.sort_by(|&a, &b| {
+            xs[a][feature]
+                .partial_cmp(&xs[b][feature])
+                .unwrap_or(std::cmp::Ordering::Equal)
+        });
+        let mut left_counts = [0usize; 3];
+        let mut right_counts = counts;
+        for i in 0..sorted.len().saturating_sub(1) {
+            let r = sorted[i];
+            let li = label_idx(ys[r]);
+            left_counts[li] += 1;
+            right_counts[li] -= 1;
+            let v = xs[r][feature];
+            let v_next = xs[sorted[i + 1]][feature];
+            if (v_next - v).abs() < 1e-9 {
+                continue; // cannot split between equal feature values
+            }
+            let n_left = i + 1;
+            let n_right = total - n_left;
+            if n_left < cfg.min_samples_leaf || n_right < cfg.min_samples_leaf {
+                continue;
+            }
+            let weighted = (n_left as f64 / total as f64) * gini(&left_counts, n_left)
+                + (n_right as f64 / total as f64) * gini(&right_counts, n_right);
+            let gain = parent_gini - weighted;
+            if gain > best.map_or(1e-9, |(_, _, bg)| bg) {
+                best = Some((feature, (v + v_next) / 2.0, gain));
+            }
+        }
+    }
+
+    match best {
+        Some((feature, threshold, gain)) => {
+            importance[feature] += gain * total as f64;
+            let (left_rows, right_rows): (Vec<usize>, Vec<usize>) =
+                rows.iter().partition(|&&r| xs[r][feature] <= threshold);
+            if left_rows.is_empty() || right_rows.is_empty() {
+                return leaf;
+            }
+            TreeNode::Split {
+                feature_idx: feature,
+                threshold,
+                left: Box::new(build_cart(
+                    &left_rows,
+                    xs,
+                    ys,
+                    depth + 1,
+                    cfg,
+                    rng,
+                    importance,
+                )),
+                right: Box::new(build_cart(
+                    &right_rows,
+                    xs,
+                    ys,
+                    depth + 1,
+                    cfg,
+                    rng,
+                    importance,
+                )),
+            }
+        }
+        None => leaf,
+    }
+}
+
+/// Precision/recall/support for one triage class.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ClassMetric {
+    pub label: String,
+    pub precision: f64,
+    pub recall: f64,
+    pub support: usize,
+}
+
+/// Evaluation metrics captured alongside a trained forest.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct TrainingMetrics {
+    /// How accuracy/precision/recall were computed — `"out_of_bag"` (each
+    /// sample scored only by the trees for which it was not in the
+    /// bootstrap bag) since Random Forest bagging makes that a held-out
+    /// estimate without needing to sacrifice training data to a split.
+    pub method: String,
+    pub sample_count: usize,
+    pub oob_evaluated: usize,
+    pub accuracy: f64,
+    pub per_class: Vec<ClassMetric>,
+    /// `[actual][predicted]`, ordered false_positive, needs_review,
+    /// true_positive.
+    pub confusion_matrix: Vec<Vec<usize>>,
+    /// Normalized mean-decrease-in-impurity importance per
+    /// [`TriageFeatures::to_vec`] column; sums to 1.0 (or all-zero if no
+    /// split ever used a feature, e.g. a single-class training set).
+    pub feature_importance: Vec<f64>,
+}
+
+impl RandomForest {
+    /// Train a bagged Random Forest with real CART trees on labelled
+    /// examples, evaluating out-of-bag. Callers should fall back to
+    /// [`RandomForest::pretrained`] when too little labelled data is
+    /// available — see [`ModelRegistry::train_random_forest`].
+    pub fn train(examples: &[TrainingExample], cfg: &ForestTrainConfig) -> (Self, TrainingMetrics) {
+        let n = examples.len();
+        let xs: Vec<Vec<f64>> = examples.iter().map(|e| e.features.clone()).collect();
+        let ys: Vec<TriageLabel> = examples.iter().map(|e| e.label).collect();
+        let n_features = xs.first().map_or(0, Vec::len).max(1);
+        let mut rng = Lcg::new(cfg.seed);
+        let mut trees = Vec::with_capacity(cfg.n_trees.max(1));
+        let mut importance = vec![0.0f64; n_features];
+        let mut oob_votes: Vec<[usize; 3]> = vec![[0; 3]; n];
+
+        for _ in 0..cfg.n_trees.max(1) {
+            let mut bag = Vec::with_capacity(n);
+            let mut in_bag = vec![false; n];
+            for _ in 0..n {
+                let idx = rng.gen_range(n);
+                bag.push(idx);
+                in_bag[idx] = true;
+            }
+            let mut tree_importance = vec![0.0; n_features];
+            let root = build_cart(&bag, &xs, &ys, 0, &cfg.tree, &mut rng, &mut tree_importance);
+            for (dst, src) in importance.iter_mut().zip(tree_importance.iter()) {
+                *dst += src;
+            }
+            let tree = DecisionTree { root };
+            for (i, in_bag_i) in in_bag.iter().enumerate() {
+                if !in_bag_i {
+                    let (label, _) = tree.predict(&xs[i]);
+                    oob_votes[i][label_idx(label)] += 1;
+                }
+            }
+            trees.push(tree);
+        }
+
+        let importance_sum: f64 = importance.iter().sum();
+        let feature_importance: Vec<f64> = if importance_sum > 0.0 {
+            importance.iter().map(|v| v / importance_sum).collect()
+        } else {
+            vec![0.0; n_features]
+        };
+
+        let mut correct = 0usize;
+        let mut confusion = vec![vec![0usize; 3]; 3];
+        let mut evaluated = 0usize;
+        for i in 0..n {
+            let total_votes: usize = oob_votes[i].iter().sum();
+            if total_votes == 0 {
+                continue; // sample was never out-of-bag (unlikely with n_trees >= a few dozen)
+            }
+            evaluated += 1;
+            let predicted_idx = oob_votes[i]
+                .iter()
+                .enumerate()
+                .max_by_key(|&(_, &c)| c)
+                .map_or(1, |(idx, _)| idx);
+            let actual_idx = label_idx(ys[i]);
+            confusion[actual_idx][predicted_idx] += 1;
+            if predicted_idx == actual_idx {
+                correct += 1;
+            }
+        }
+        let accuracy = if evaluated > 0 {
+            correct as f64 / evaluated as f64
+        } else {
+            0.0
+        };
+
+        let mut per_class = Vec::with_capacity(3);
+        for (class_idx, row) in confusion.iter().enumerate() {
+            let support: usize = row.iter().sum();
+            let tp = row[class_idx];
+            let predicted_total: usize = (0..3).map(|actual| confusion[actual][class_idx]).sum();
+            let precision = if predicted_total > 0 {
+                tp as f64 / predicted_total as f64
+            } else {
+                0.0
+            };
+            let recall = if support > 0 {
+                tp as f64 / support as f64
+            } else {
+                0.0
+            };
+            per_class.push(ClassMetric {
+                label: triage_label_str(idx_label(class_idx)).to_string(),
+                precision,
+                recall,
+                support,
+            });
+        }
+
+        let forest = Self {
+            trees,
+            version: format!("trained-{}-{}", cfg.n_trees, cfg.seed),
+        };
+        let metrics = TrainingMetrics {
+            method: "out_of_bag".into(),
+            sample_count: n,
+            oob_evaluated: evaluated,
+            accuracy,
+            per_class,
+            confusion_matrix: confusion,
+            feature_importance,
+        };
+        (forest, metrics)
+    }
+}
+
+/// A trained forest plus the metrics/provenance recorded alongside it, as
+/// persisted to storage (see [`ModelRegistry::export_random_forest_snapshot`]).
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct PersistedForestSnapshot {
+    pub forest: RandomForest,
+    pub metrics: TrainingMetrics,
+    pub trained_at: String,
+    pub sample_count: usize,
+}
+
+/// Result of a `train_random_forest` call: whether a real model was fitted,
+/// or the pretrained cold-start fallback was kept because too little
+/// labelled data was available.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct RandomForestTrainingOutcome {
+    pub trained: bool,
+    pub reason: Option<String>,
+    pub sample_count: usize,
+    pub min_required: usize,
+    pub forest_version: String,
+    pub trained_at: Option<String>,
+    pub metrics: Option<TrainingMetrics>,
+}
+
+/// Current state of the Random Forest triage slot.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct RandomForestStatus {
+    /// `false` means the pretrained cold-start forest is still active.
+    pub trained: bool,
+    pub version: String,
+    pub sample_count: usize,
+    pub min_required: usize,
+    pub trained_at: Option<String>,
+    pub metrics: Option<TrainingMetrics>,
 }
 
 // ── Gradient-Boosted Classifier ──────────────────────────────────────
@@ -994,6 +1421,11 @@ pub struct ModelRegistryStatus {
 const BACKEND_GBM: &str = "gradient_boost";
 const BACKEND_RF: &str = "random_forest";
 
+/// Minimum labelled samples, with both `true_positive` and `false_positive`
+/// verdicts present, required before [`ModelRegistry::train_random_forest`]
+/// will replace the pretrained cold-start forest.
+pub const DEFAULT_MIN_TRAINING_SAMPLES: usize = 50;
+
 #[derive(Debug)]
 pub struct ModelRegistry {
     fallback: RandomForestEngine,
@@ -1002,6 +1434,10 @@ pub struct ModelRegistry {
     prefer_gbm_primary: bool,
     last_refreshed_at: String,
     recent_shadow_reports: Vec<ShadowInferenceRecord>,
+    rf_metrics: Option<TrainingMetrics>,
+    rf_trained_at: Option<String>,
+    rf_sample_count: usize,
+    min_training_samples: usize,
 }
 
 impl ModelRegistry {
@@ -1013,9 +1449,133 @@ impl ModelRegistry {
             prefer_gbm_primary: true,
             last_refreshed_at: chrono::Utc::now().to_rfc3339(),
             recent_shadow_reports: Vec::new(),
+            rf_metrics: None,
+            rf_trained_at: None,
+            rf_sample_count: 0,
+            min_training_samples: DEFAULT_MIN_TRAINING_SAMPLES,
         };
         registry.refresh();
         registry
+    }
+
+    /// Train the Random Forest triage slot on labelled examples (analyst
+    /// verdicts). If fewer than [`Self::min_training_samples`] examples are
+    /// available, or both classes (`true_positive`/`false_positive`) are not
+    /// represented, the pretrained cold-start forest is kept and the outcome
+    /// explains why.
+    pub fn train_random_forest(
+        &mut self,
+        examples: &[TrainingExample],
+        cfg: ForestTrainConfig,
+    ) -> RandomForestTrainingOutcome {
+        let mut class_counts = [0usize; 3];
+        for example in examples {
+            class_counts[label_idx(example.label)] += 1;
+        }
+        let has_both_classes = class_counts[0] > 0 && class_counts[2] > 0;
+        if examples.len() < self.min_training_samples || !has_both_classes {
+            return RandomForestTrainingOutcome {
+                trained: false,
+                reason: Some(format!(
+                    "insufficient labelled data: {} sample(s) (need >= {}) with both \
+                     true_positive and false_positive verdicts present ({} fp / {} review / \
+                     {} tp seen) — keeping the pretrained cold-start forest",
+                    examples.len(),
+                    self.min_training_samples,
+                    class_counts[0],
+                    class_counts[1],
+                    class_counts[2]
+                )),
+                sample_count: examples.len(),
+                min_required: self.min_training_samples,
+                forest_version: self.fallback.rf_triage.version.clone(),
+                trained_at: None,
+                metrics: None,
+            };
+        }
+
+        let (forest, metrics) = RandomForest::train(examples, &cfg);
+        let sample_count = examples.len();
+        self.apply_trained_random_forest(forest, metrics.clone(), sample_count);
+
+        RandomForestTrainingOutcome {
+            trained: true,
+            reason: None,
+            sample_count,
+            min_required: self.min_training_samples,
+            forest_version: self.fallback.rf_triage.version.clone(),
+            trained_at: self.rf_trained_at.clone(),
+            metrics: Some(metrics),
+        }
+    }
+
+    /// Minimum labelled sample count (with both classes present) required
+    /// before [`Self::train_random_forest`] will replace the pretrained
+    /// cold-start forest. Exposed so callers (e.g. the `/api/ml/train` HTTP
+    /// handler) can run the actual `RandomForest::train` computation without
+    /// holding the registry (and its enclosing `AppState` mutex) locked
+    /// across the whole training pass.
+    pub fn min_training_samples(&self) -> usize {
+        self.min_training_samples
+    }
+
+    /// Class-balance/size check identical to the one `train_random_forest`
+    /// applies before training, without doing any training. Lets a caller
+    /// decide, cheaply and off the state lock, whether it's worth running
+    /// `RandomForest::train` at all.
+    pub fn can_train_random_forest(examples: &[TrainingExample], min_required: usize) -> bool {
+        let mut class_counts = [0usize; 3];
+        for example in examples {
+            class_counts[label_idx(example.label)] += 1;
+        }
+        let has_both_classes = class_counts[0] > 0 && class_counts[2] > 0;
+        examples.len() >= min_required && has_both_classes
+    }
+
+    /// Apply an already-trained forest (e.g. produced by `RandomForest::
+    /// train` off the state lock) to the Random Forest triage slot.
+    pub fn apply_trained_random_forest(
+        &mut self,
+        forest: RandomForest,
+        metrics: TrainingMetrics,
+        sample_count: usize,
+    ) {
+        let trained_at = chrono::Utc::now().to_rfc3339();
+        self.fallback.rf_triage = forest;
+        self.rf_metrics = Some(metrics);
+        self.rf_trained_at = Some(trained_at);
+        self.rf_sample_count = sample_count;
+    }
+
+    /// Current state of the Random Forest triage slot for the status API.
+    pub fn random_forest_status(&self) -> RandomForestStatus {
+        RandomForestStatus {
+            trained: self.rf_metrics.is_some(),
+            version: self.fallback.rf_triage.version.clone(),
+            sample_count: self.rf_sample_count,
+            min_required: self.min_training_samples,
+            trained_at: self.rf_trained_at.clone(),
+            metrics: self.rf_metrics.clone(),
+        }
+    }
+
+    /// Snapshot the trained forest for persistence, or `None` if only the
+    /// pretrained cold-start forest has ever been active.
+    pub fn export_random_forest_snapshot(&self) -> Option<PersistedForestSnapshot> {
+        Some(PersistedForestSnapshot {
+            forest: self.fallback.rf_triage.clone(),
+            metrics: self.rf_metrics.clone()?,
+            trained_at: self.rf_trained_at.clone()?,
+            sample_count: self.rf_sample_count,
+        })
+    }
+
+    /// Restore a previously trained-and-persisted forest, e.g. on startup.
+    pub fn import_random_forest_snapshot(&mut self, snapshot: PersistedForestSnapshot) {
+        self.fallback.rf_triage = snapshot.forest;
+        self.rf_metrics = Some(snapshot.metrics);
+        self.rf_trained_at = Some(snapshot.trained_at);
+        self.rf_sample_count = snapshot.sample_count;
     }
 
     /// Re-scan the model directory for serialized classifier overrides.
@@ -1531,5 +2091,160 @@ mod tests {
         let result = rf.predict(&features.to_vec());
         assert_eq!(result.label, TriageLabel::TruePositive);
         assert!(result.confidence > 0.7);
+    }
+
+    // ── CART / bagged Random Forest training ────────────────────────
+
+    /// A trivially separable dataset: feature 0 alone determines the label.
+    fn separable_examples(n_per_class: usize) -> Vec<TrainingExample> {
+        // Only feature 0 carries any signal; every other column is held
+        // constant across classes so feature importance is unambiguous.
+        let mut examples = Vec::with_capacity(n_per_class * 3);
+        for i in 0..n_per_class {
+            let jitter = (i as f64 % 5.0) * 0.01;
+            examples.push(TrainingExample {
+                features: vec![0.05 + jitter, 0.5, 1.0, 0.5, 0.5, 0.5, 0.5],
+                label: TriageLabel::FalsePositive,
+            });
+            examples.push(TrainingExample {
+                features: vec![0.5 + jitter, 0.5, 1.0, 0.5, 0.5, 0.5, 0.5],
+                label: TriageLabel::NeedsReview,
+            });
+            examples.push(TrainingExample {
+                features: vec![0.95 + jitter, 0.5, 1.0, 0.5, 0.5, 0.5, 0.5],
+                label: TriageLabel::TruePositive,
+            });
+        }
+        examples
+    }
+
+    #[test]
+    fn cart_forest_learns_a_separable_dataset() {
+        let examples = separable_examples(40);
+        // Consider all features at every split (no subsampling): only
+        // feature 0 carries signal, and this isolates the CART learner's
+        // correctness from the forest's feature-bagging randomness.
+        let cfg = ForestTrainConfig {
+            n_trees: 30,
+            seed: 7,
+            tree: TreeTrainConfig::default(),
+        };
+        let (forest, metrics) = RandomForest::train(&examples, &cfg);
+
+        assert_eq!(metrics.sample_count, examples.len());
+        assert!(metrics.accuracy > 0.9, "accuracy was {}", metrics.accuracy);
+        assert!(
+            metrics.feature_importance[0] > 0.5,
+            "feature 0 should dominate importance"
+        );
+
+        let fp = forest.predict(&[0.02, 0.1, 0.0, 0.5, 0.5, 0.0, 0.02]);
+        assert_eq!(fp.label, TriageLabel::FalsePositive);
+        let tp = forest.predict(&[0.98, 0.95, 3.0, 0.5, 0.5, 1.0, 0.98]);
+        assert_eq!(tp.label, TriageLabel::TruePositive);
+    }
+
+    #[test]
+    fn cart_tree_respects_max_depth() {
+        fn max_depth(node: &TreeNode) -> usize {
+            match node {
+                TreeNode::Leaf { .. } => 0,
+                TreeNode::Split { left, right, .. } => 1 + max_depth(left).max(max_depth(right)),
+            }
+        }
+        let examples = separable_examples(50);
+        let cfg = ForestTrainConfig {
+            n_trees: 5,
+            tree: TreeTrainConfig {
+                max_depth: 2,
+                ..TreeTrainConfig::default()
+            },
+            seed: 1,
+        };
+        let (forest, _) = RandomForest::train(&examples, &cfg);
+        for tree in &forest.trees {
+            assert!(max_depth(&tree.root) <= 2);
+        }
+    }
+
+    #[test]
+    fn cart_forest_training_is_deterministic_for_a_seed() {
+        let examples = separable_examples(20);
+        let cfg = ForestTrainConfig {
+            n_trees: 10,
+            seed: 99,
+            ..ForestTrainConfig::default()
+        };
+        let (a, ma) = RandomForest::train(&examples, &cfg);
+        let (b, mb) = RandomForest::train(&examples, &cfg);
+        let probe = [0.5, 0.5, 1.0, 0.5, 0.5, 0.5, 0.5];
+        assert_eq!(a.predict(&probe).label, b.predict(&probe).label);
+        assert!((ma.accuracy - mb.accuracy).abs() < 1e-12);
+        assert_eq!(
+            serde_json::to_string(&a).unwrap(),
+            serde_json::to_string(&b).unwrap()
+        );
+    }
+
+    #[test]
+    fn cart_forest_serialization_round_trip() {
+        let examples = separable_examples(20);
+        let (forest, _) = RandomForest::train(&examples, &ForestTrainConfig::default());
+        let json = serde_json::to_string(&forest).unwrap();
+        let back: RandomForest = serde_json::from_str(&json).unwrap();
+        let probe = [0.95, 0.9, 3.0, 0.5, 0.5, 1.0, 0.95];
+        assert_eq!(forest.predict(&probe).label, back.predict(&probe).label);
+    }
+
+    #[test]
+    fn registry_keeps_pretrained_forest_when_data_is_insufficient() {
+        let mut registry = ModelRegistry::new("/nonexistent/models");
+        let baseline_version = registry.random_forest_status().version;
+        let examples = separable_examples(2); // well under DEFAULT_MIN_TRAINING_SAMPLES
+        let outcome = registry.train_random_forest(&examples, ForestTrainConfig::default());
+        assert!(!outcome.trained);
+        assert!(outcome.reason.is_some());
+        let status = registry.random_forest_status();
+        assert!(!status.trained);
+        assert_eq!(status.version, baseline_version);
+    }
+
+    #[test]
+    fn registry_trains_and_persists_forest_with_enough_labelled_data() {
+        let mut registry = ModelRegistry::new("/nonexistent/models");
+        let examples = separable_examples(30); // 90 samples, both classes present
+        let outcome = registry.train_random_forest(&examples, ForestTrainConfig::default());
+        assert!(outcome.trained);
+        let metrics = outcome.metrics.expect("trained outcome carries metrics");
+        assert!(metrics.accuracy > 0.8);
+
+        let status = registry.random_forest_status();
+        assert!(status.trained);
+        assert_eq!(status.sample_count, examples.len());
+
+        let snapshot = registry
+            .export_random_forest_snapshot()
+            .expect("trained forest can be snapshotted");
+        let json = serde_json::to_string(&snapshot).unwrap();
+        let restored: PersistedForestSnapshot = serde_json::from_str(&json).unwrap();
+
+        let mut fresh_registry = ModelRegistry::new("/nonexistent/models");
+        fresh_registry.import_random_forest_snapshot(restored);
+        assert_eq!(
+            fresh_registry.random_forest_status().sample_count,
+            examples.len()
+        );
+        let probe = TriageFeatures {
+            anomaly_score: 0.98,
+            confidence: 0.95,
+            suspicious_axes: 3,
+            hour_of_day: 12,
+            day_of_week: 3,
+            alert_frequency_1h: 5,
+            device_risk_score: 0.95,
+        };
+        let before = registry.triage_alert(&probe);
+        let after = fresh_registry.triage_alert(&probe);
+        assert_eq!(before.result.label, after.result.label);
     }
 }

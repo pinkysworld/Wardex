@@ -98,7 +98,23 @@ pub enum KernelEventSeverity {
 /// Source platform that generated the event.
 #[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
 pub enum EventSource {
+    /// Reserved for a real in-kernel eBPF telemetry backend. Not produced
+    /// by any collector today — see the `ebpf` cargo feature and
+    /// `src/kernel_linux/mod.rs`. Do not use this for /proc-polled or
+    /// netlink/fanotify/inotify-sourced events; use the dedicated variants
+    /// below instead so downstream consumers can trust the label.
     EbpfLinux,
+    /// Process lifecycle events (exec/fork/exit/uid-change) pushed by the
+    /// kernel over the `CN_PROC` netlink process connector.
+    NetlinkProcConnector,
+    /// File activity events pushed by the kernel via `fanotify(7)`.
+    Fanotify,
+    /// File activity events pushed by the kernel via `inotify(7)` — used
+    /// as a fallback when fanotify is unavailable.
+    Inotify,
+    /// Telemetry produced by periodic `/proc` (and directory metadata)
+    /// polling rather than a kernel-pushed event source.
+    ProcPoll,
     AuditdLinux,
     SelinuxLinux,
     EsfMacos,
@@ -246,6 +262,17 @@ pub enum KernelEventKind {
         filter_name: String,
         consumer_name: String,
         query: String,
+    },
+
+    // ── PowerShell ScriptBlock logging (Windows, ETW event 4104) ──
+    ScriptBlockExecution {
+        pid: u32,
+        script_block_id: String,
+        /// Which fragment this is, out of `message_total` (large script
+        /// blocks are split across several ETW events).
+        message_number: u32,
+        message_total: u32,
+        script_text: String,
     },
 
     // ── macOS-specific ───────────────────────────────────────
@@ -429,6 +456,7 @@ pub fn kernel_event_kind_name(kind: &KernelEventKind) -> &'static str {
         KernelEventKind::NamedPipeConnect { .. } => "pipe_connect",
         KernelEventKind::AmsiScan { .. } => "amsi",
         KernelEventKind::WmiPersistence { .. } => "wmi",
+        KernelEventKind::ScriptBlockExecution { .. } => "scriptblock",
         KernelEventKind::TccAccess { .. } => "tcc",
         KernelEventKind::GatekeeperVerdict { .. } => "gatekeeper",
         KernelEventKind::SystemExtensionEvent { .. } => "sysext",
@@ -504,6 +532,17 @@ pub fn suggest_mitre(kind: &KernelEventKind) -> Vec<MitreTechnique> {
         }
         KernelEventKind::WmiPersistence { .. } => {
             vec![T1546_EVENT_TRIGGERED()]
+        }
+        KernelEventKind::ScriptBlockExecution { script_text, .. } => {
+            let mut v = vec![T1059_COMMAND_INTERPRETER()];
+            let lower = script_text.to_lowercase();
+            if lower.contains("frombase64string")
+                || lower.contains("-enc")
+                || lower.contains("compress")
+            {
+                v.push(T1027_OBFUSCATED_FILES());
+            }
+            v
         }
         KernelEventKind::DriverLoad { signed, .. } => {
             if !signed {

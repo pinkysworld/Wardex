@@ -44,7 +44,71 @@ pub struct SmtpConfig {
     pub from: String,
     pub to: Vec<String>,
     pub username: Option<String>,
+    /// AUTH password/app-password, sent as AUTH PLAIN/LOGIN once the
+    /// connection is on TLS (either STARTTLS or implicit TLS). Never used
+    /// over a plaintext connection.
+    #[serde(default, skip_serializing)]
+    pub password: Option<String>,
+    /// Upgrade the connection with STARTTLS after EHLO. Ignored (treated as
+    /// already-TLS) when `implicit_tls` is set.
     pub use_tls: bool,
+    /// Connect with implicit TLS from the first byte (typically port 465),
+    /// instead of STARTTLS on a plaintext port (typically 587/25).
+    #[serde(default)]
+    pub implicit_tls: bool,
+    /// Optional additional PEM-encoded certificate(s) to trust, alongside
+    /// the built-in Mozilla root store. Use this to reach an internal relay
+    /// signed by a private CA (or, in tests, a self-signed certificate).
+    /// Certificate verification stays on — this only widens the trust
+    /// anchors, it never disables verification.
+    #[serde(default)]
+    pub ca_cert_pem: Option<String>,
+    /// Explicit opt-in to send AUTH credentials over a plaintext (non-TLS)
+    /// connection. Refused by default: `smtp_send` sends AUTH only once the
+    /// connection is on TLS (STARTTLS or implicit), unless this is set AND
+    /// `host` is a loopback address, for trusted local test/relay setups.
+    #[serde(default)]
+    pub allow_plaintext_auth: bool,
+}
+
+impl SmtpConfig {
+    /// Reject `from`/`to` addresses that could be used for SMTP command or
+    /// header injection: they are interpolated directly into `MAIL FROM:`,
+    /// `RCPT TO:`, and the `From`/`To` message headers, so a value carrying
+    /// CR/LF (a new SMTP command or message header) or `<`/`>` (closing the
+    /// angle-bracket address early to splice in extra header lines) must be
+    /// rejected up front rather than sent to the wire.
+    pub fn validate(&self) -> Result<(), String> {
+        fn is_safe_address(addr: &str) -> bool {
+            !addr
+                .bytes()
+                .any(|b| matches!(b, b'\r' | b'\n' | b'<' | b'>'))
+        }
+        if !is_safe_address(&self.from) {
+            return Err("smtp 'from' address contains an invalid character (CR/LF/'<'/'>')".into());
+        }
+        if self.to.is_empty() {
+            return Err("smtp 'to' must have at least one recipient".into());
+        }
+        for rcpt in &self.to {
+            if !is_safe_address(rcpt) {
+                return Err(format!(
+                    "smtp 'to' address {rcpt:?} contains an invalid character (CR/LF/'<'/'>')"
+                ));
+            }
+        }
+        Ok(())
+    }
+
+    /// Whether `host` is a loopback address — the only case
+    /// `allow_plaintext_auth` is honoured for.
+    fn host_is_loopback(&self) -> bool {
+        matches!(self.host.as_str(), "127.0.0.1" | "::1" | "localhost")
+            || self
+                .host
+                .parse::<std::net::IpAddr>()
+                .is_ok_and(|ip| ip.is_loopback())
+    }
 }
 
 // ── Notification payload ─────────────────────────────────────────────
@@ -556,77 +620,366 @@ pub fn build_notification(
     }
 }
 
-// ── Minimal SMTP delivery ────────────────────────────────────────────
+// ── SMTP delivery: STARTTLS / implicit TLS / AUTH ─────────────────────
+//
+// Supports plaintext, STARTTLS (upgrade after EHLO, typically port 587/25),
+// and implicit TLS (encrypted from the first byte, typically port 465), plus
+// AUTH PLAIN/LOGIN. Certificate verification is always on — there is no
+// "skip verification" escape hatch. When TLS is requested but this binary
+// was built without the `tls` cargo feature, delivery fails with a clear
+// error instead of silently falling back to plaintext.
+
+/// Transport used for the SMTP dialog: a plain TCP socket, or (with the
+/// `tls` feature) one upgraded to TLS either implicitly or via STARTTLS.
+enum SmtpTransport {
+    Plain(std::net::TcpStream),
+    #[cfg(feature = "tls")]
+    Tls(Box<rustls::StreamOwned<rustls::ClientConnection, std::net::TcpStream>>),
+}
+
+impl std::io::Read for SmtpTransport {
+    fn read(&mut self, buf: &mut [u8]) -> std::io::Result<usize> {
+        match self {
+            Self::Plain(s) => s.read(buf),
+            #[cfg(feature = "tls")]
+            Self::Tls(s) => s.read(buf),
+        }
+    }
+}
+
+impl std::io::Write for SmtpTransport {
+    fn write(&mut self, buf: &[u8]) -> std::io::Result<usize> {
+        match self {
+            Self::Plain(s) => s.write(buf),
+            #[cfg(feature = "tls")]
+            Self::Tls(s) => s.write(buf),
+        }
+    }
+    fn flush(&mut self) -> std::io::Result<()> {
+        match self {
+            Self::Plain(s) => s.flush(),
+            #[cfg(feature = "tls")]
+            Self::Tls(s) => s.flush(),
+        }
+    }
+}
+
+#[cfg(feature = "tls")]
+fn parse_pem_certificates(
+    pem: &str,
+) -> Result<Vec<rustls::pki_types::CertificateDer<'static>>, String> {
+    use base64::Engine;
+    let mut certs = Vec::new();
+    let mut current = String::new();
+    let mut in_cert = false;
+    for line in pem.lines() {
+        let trimmed = line.trim();
+        if trimmed.starts_with("-----BEGIN CERTIFICATE-----") {
+            in_cert = true;
+            current.clear();
+            continue;
+        }
+        if trimmed.starts_with("-----END CERTIFICATE-----") {
+            in_cert = false;
+            let bytes = base64::engine::general_purpose::STANDARD
+                .decode(current.trim())
+                .map_err(|e| format!("invalid PEM certificate: {e}"))?;
+            certs.push(rustls::pki_types::CertificateDer::from(bytes));
+            continue;
+        }
+        if in_cert {
+            current.push_str(trimmed);
+        }
+    }
+    if certs.is_empty() {
+        return Err("no certificates found in PEM input".into());
+    }
+    Ok(certs)
+}
+
+#[cfg(feature = "tls")]
+fn build_tls_client_config(
+    extra_trusted_pem: Option<&str>,
+) -> Result<std::sync::Arc<rustls::ClientConfig>, String> {
+    let mut roots = rustls::RootCertStore::empty();
+    roots.extend(webpki_roots::TLS_SERVER_ROOTS.iter().cloned());
+    if let Some(pem) = extra_trusted_pem {
+        for cert in parse_pem_certificates(pem)? {
+            roots
+                .add(cert)
+                .map_err(|e| format!("failed to add trusted certificate: {e}"))?;
+        }
+    }
+    let provider = std::sync::Arc::new(rustls::crypto::ring::default_provider());
+    let config = rustls::ClientConfig::builder_with_provider(provider)
+        .with_safe_default_protocol_versions()
+        .map_err(|e| format!("smtp tls config: {e}"))?
+        .with_root_certificates(roots)
+        .with_no_client_auth();
+    Ok(std::sync::Arc::new(config))
+}
+
+#[cfg(feature = "tls")]
+fn upgrade_to_tls(
+    tcp: std::net::TcpStream,
+    host: &str,
+    extra_trusted_pem: Option<&str>,
+) -> Result<SmtpTransport, String> {
+    let config = build_tls_client_config(extra_trusted_pem)?;
+    let server_name = rustls::pki_types::ServerName::try_from(host.to_string())
+        .map_err(|e| format!("smtp tls: invalid server name '{host}': {e}"))?;
+    let conn = rustls::ClientConnection::new(config, server_name)
+        .map_err(|e| format!("smtp tls handshake setup failed: {e}"))?;
+    Ok(SmtpTransport::Tls(Box::new(rustls::StreamOwned::new(
+        conn, tcp,
+    ))))
+}
+
+#[cfg(not(feature = "tls"))]
+fn upgrade_to_tls(
+    _tcp: std::net::TcpStream,
+    _host: &str,
+    _extra_trusted_pem: Option<&str>,
+) -> Result<SmtpTransport, String> {
+    Err("SMTP TLS was requested but this build was compiled without the `tls` feature".into())
+}
+
+/// Line-oriented SMTP session helper over a boxed transport. Reads are
+/// buffered internally (a `Transport` may be a TLS stream, which cannot be
+/// safely wrapped in `BufReader` after also being written to on the same
+/// object without extra bookkeeping).
+struct SmtpSession {
+    transport: SmtpTransport,
+    read_buf: Vec<u8>,
+}
+
+impl SmtpSession {
+    fn new(transport: SmtpTransport) -> Self {
+        Self {
+            transport,
+            read_buf: Vec::new(),
+        }
+    }
+
+    fn read_line(&mut self) -> Result<String, String> {
+        use std::io::Read;
+        loop {
+            if let Some(pos) = self.read_buf.iter().position(|&b| b == b'\n') {
+                let line: Vec<u8> = self.read_buf.drain(..=pos).collect();
+                return Ok(String::from_utf8_lossy(&line).trim_end().to_string());
+            }
+            let mut chunk = [0u8; 1024];
+            let n = self
+                .transport
+                .read(&mut chunk)
+                .map_err(|e| format!("smtp read: {e}"))?;
+            if n == 0 {
+                return Err("smtp connection closed unexpectedly".into());
+            }
+            self.read_buf.extend_from_slice(&chunk[..n]);
+        }
+    }
+
+    fn write_raw(&mut self, data: &str) -> Result<(), String> {
+        use std::io::Write;
+        self.transport
+            .write_all(data.as_bytes())
+            .map_err(|e| format!("smtp write: {e}"))?;
+        self.transport
+            .flush()
+            .map_err(|e| format!("smtp flush: {e}"))
+    }
+
+    fn command(&mut self, line: &str) -> Result<(), String> {
+        self.write_raw(&format!("{line}\r\n"))
+    }
+
+    /// Read a (possibly multi-line) reply and assert it starts with
+    /// `expect_code`. Returns the last line's text after the code.
+    fn read_reply(&mut self, expect_code: &str) -> Result<String, String> {
+        loop {
+            let line = self.read_line()?;
+            if line.len() < 3 || !line.starts_with(expect_code) {
+                return Err(format!("smtp expected {expect_code}, got: {}", line.trim()));
+            }
+            let continuation = line.as_bytes().get(3) == Some(&b'-');
+            if !continuation {
+                return Ok(line.get(4..).unwrap_or("").to_string());
+            }
+        }
+    }
+
+    /// Read the multi-line EHLO reply and return the advertised capability
+    /// lines (e.g. "STARTTLS", "AUTH PLAIN LOGIN"), uppercased.
+    fn read_ehlo_capabilities(&mut self) -> Result<Vec<String>, String> {
+        let mut caps = Vec::new();
+        loop {
+            let line = self.read_line()?;
+            if line.len() < 3 || !line.starts_with("250") {
+                return Err(format!("smtp expected 250 (EHLO), got: {}", line.trim()));
+            }
+            caps.push(line.get(4..).unwrap_or("").trim().to_ascii_uppercase());
+            let continuation = line.as_bytes().get(3) == Some(&b'-');
+            if !continuation {
+                break;
+            }
+        }
+        Ok(caps)
+    }
+}
+
+/// Dot-stuff a message body per RFC 5321 §4.5.2: any line beginning with
+/// '.' gets an extra leading '.' so it isn't mistaken for the terminator.
+fn dot_stuff(message: &str) -> String {
+    message
+        .split('\n')
+        .map(|line| line.strip_suffix('\r').unwrap_or(line))
+        .map(|line| {
+            if line.starts_with('.') {
+                format!(".{line}")
+            } else {
+                line.to_string()
+            }
+        })
+        .collect::<Vec<_>>()
+        .join("\r\n")
+}
+
+fn base64_encode(data: &[u8]) -> String {
+    use base64::Engine;
+    base64::engine::general_purpose::STANDARD.encode(data)
+}
 
 fn smtp_send(cfg: &SmtpConfig, message: &str) -> Result<(), String> {
-    use std::io::{BufRead, BufReader, Write};
     use std::net::TcpStream;
     use std::time::Duration;
 
-    let addr = format!("{}:{}", cfg.host, cfg.port);
-    let stream = TcpStream::connect(&addr).map_err(|e| format!("smtp connect: {e}"))?;
-    stream.set_read_timeout(Some(Duration::from_secs(15))).ok();
-    stream.set_write_timeout(Some(Duration::from_secs(15))).ok();
+    cfg.validate()?;
 
-    let mut writer = stream.try_clone().map_err(|e| format!("clone: {e}"))?;
-    let mut reader = BufReader::new(stream);
-
-    fn read_reply(reader: &mut BufReader<TcpStream>, expect_code: &str) -> Result<(), String> {
-        let mut line = String::new();
-        reader
-            .read_line(&mut line)
-            .map_err(|e| format!("smtp read: {e}"))?;
-        if !line.starts_with(expect_code) {
-            return Err(format!("smtp expected {expect_code}, got: {}", line.trim()));
-        }
-        Ok(())
+    let wants_tls = cfg.use_tls || cfg.implicit_tls;
+    if wants_tls && cfg!(not(feature = "tls")) {
+        return Err(
+            "SMTP TLS was requested but this build was compiled without the `tls` feature".into(),
+        );
     }
 
-    read_reply(&mut reader, "220")?;
+    let addr = format!("{}:{}", cfg.host, cfg.port);
+    let tcp = TcpStream::connect(&addr).map_err(|e| format!("smtp connect: {e}"))?;
+    tcp.set_read_timeout(Some(Duration::from_secs(20))).ok();
+    tcp.set_write_timeout(Some(Duration::from_secs(20))).ok();
+
+    let mut connection_is_tls = cfg.implicit_tls;
+    let transport = if cfg.implicit_tls {
+        upgrade_to_tls(tcp, &cfg.host, cfg.ca_cert_pem.as_deref())?
+    } else {
+        SmtpTransport::Plain(tcp)
+    };
+    let mut session = SmtpSession::new(transport);
+
+    session.read_reply("220")?;
 
     let helo = std::env::var("HOSTNAME").unwrap_or_else(|_| "wardex.local".into());
-    write!(writer, "EHLO {helo}\r\n").map_err(|e| format!("smtp write: {e}"))?;
-    writer.flush().map_err(|e| format!("smtp flush: {e}"))?;
-    // Read multi-line EHLO response
-    loop {
-        let mut line = String::new();
-        reader
-            .read_line(&mut line)
-            .map_err(|e| format!("smtp read ehlo: {e}"))?;
-        if line.len() < 4 {
-            break;
+    session.command(&format!("EHLO {helo}"))?;
+    let mut capabilities = session.read_ehlo_capabilities()?;
+
+    if cfg.use_tls && !cfg.implicit_tls {
+        if !capabilities.iter().any(|c| c == "STARTTLS") {
+            return Err("smtp server does not advertise STARTTLS".into());
         }
-        if line.as_bytes()[3] == b' ' {
-            break;
+        session.command("STARTTLS")?;
+        session.read_reply("220")?;
+
+        // Re-borrow the underlying TCP socket for the TLS handshake. Only
+        // the `Plain` variant can reach here (implicit TLS took the other
+        // branch above), so this always succeeds.
+        let SmtpSession {
+            transport,
+            read_buf,
+        } = session;
+        let tcp = match transport {
+            SmtpTransport::Plain(tcp) => tcp,
+            #[cfg(feature = "tls")]
+            SmtpTransport::Tls(_) => {
+                return Err("smtp internal error: unexpected TLS transport before STARTTLS".into());
+            }
+        };
+        if !read_buf.is_empty() {
+            return Err("smtp protocol error: unexpected data before TLS handshake".into());
+        }
+        let transport = upgrade_to_tls(tcp, &cfg.host, cfg.ca_cert_pem.as_deref())?;
+        session = SmtpSession::new(transport);
+        connection_is_tls = true;
+
+        // RFC 3207: state resets after STARTTLS, so re-issue EHLO.
+        session.command(&format!("EHLO {helo}"))?;
+        capabilities = session.read_ehlo_capabilities()?;
+    }
+
+    if let (Some(username), Some(password)) = (cfg.username.as_ref(), cfg.password.as_ref()) {
+        // Sending AUTH over a plaintext connection hands credentials to
+        // anyone on the network path. Refuse unless the connection is on
+        // TLS, or the operator has explicitly opted in for a trusted
+        // loopback relay (e.g. a local test/dev mail sink).
+        if !(connection_is_tls || (cfg.allow_plaintext_auth && cfg.host_is_loopback())) {
+            return Err(
+                "refusing to send SMTP AUTH credentials over a plaintext connection; \
+                 enable use_tls/implicit_tls, or set allow_plaintext_auth for a \
+                 trusted loopback relay"
+                    .into(),
+            );
+        }
+        let auth_line = capabilities
+            .iter()
+            .find(|c| c.starts_with("AUTH "))
+            .cloned()
+            .unwrap_or_default();
+        if auth_line.contains("PLAIN") {
+            let mut creds = Vec::new();
+            creds.push(0u8);
+            creds.extend_from_slice(username.as_bytes());
+            creds.push(0u8);
+            creds.extend_from_slice(password.as_bytes());
+            session.command(&format!("AUTH PLAIN {}", base64_encode(&creds)))?;
+            session.read_reply("235")?;
+        } else if auth_line.contains("LOGIN") {
+            session.command("AUTH LOGIN")?;
+            session.read_reply("334")?;
+            session.command(&base64_encode(username.as_bytes()))?;
+            session.read_reply("334")?;
+            session.command(&base64_encode(password.as_bytes()))?;
+            session.read_reply("235")?;
+        } else {
+            return Err(
+                "smtp credentials configured but server advertises no supported AUTH mechanism"
+                    .into(),
+            );
         }
     }
 
-    write!(writer, "MAIL FROM:<{}>\r\n", cfg.from).map_err(|e| format!("smtp write: {e}"))?;
-    writer.flush().map_err(|e| format!("smtp flush: {e}"))?;
-    read_reply(&mut reader, "250")?;
+    session.command(&format!("MAIL FROM:<{}>", cfg.from))?;
+    session.read_reply("250")?;
 
     for rcpt in &cfg.to {
-        write!(writer, "RCPT TO:<{rcpt}>\r\n").map_err(|e| format!("smtp write: {e}"))?;
-        writer.flush().map_err(|e| format!("smtp flush: {e}"))?;
-        read_reply(&mut reader, "250")?;
+        session.command(&format!("RCPT TO:<{rcpt}>"))?;
+        session.read_reply("250")?;
     }
 
-    write!(writer, "DATA\r\n").map_err(|e| format!("smtp write: {e}"))?;
-    writer.flush().map_err(|e| format!("smtp flush: {e}"))?;
-    read_reply(&mut reader, "354")?;
+    session.command("DATA")?;
+    session.read_reply("354")?;
 
-    // Write message headers and body, then terminator
-    write!(writer, "From: <{}>\r\n", cfg.from).map_err(|e| format!("smtp write: {e}"))?;
+    let mut body = String::new();
+    body.push_str(&format!("From: <{}>\r\n", cfg.from));
     for rcpt in &cfg.to {
-        write!(writer, "To: <{rcpt}>\r\n").map_err(|e| format!("smtp write: {e}"))?;
+        body.push_str(&format!("To: <{rcpt}>\r\n"));
     }
-    // message already contains Subject + Content-Type + body from format_email
-    write!(writer, "{message}\r\n.\r\n").map_err(|e| format!("smtp write: {e}"))?;
-    writer.flush().map_err(|e| format!("smtp flush: {e}"))?;
-    read_reply(&mut reader, "250")?;
+    // `message` already contains Subject + Content-Type + body from
+    // `format_email`; dot-stuff the combined content before the terminator.
+    body.push_str(message);
+    let stuffed = dot_stuff(&body);
+    session.write_raw(&format!("{stuffed}\r\n.\r\n"))?;
+    session.read_reply("250")?;
 
-    write!(writer, "QUIT\r\n").map_err(|e| format!("smtp write: {e}"))?;
-    writer.flush().ok();
+    session.command("QUIT").ok();
 
     Ok(())
 }
@@ -724,7 +1077,11 @@ mod tests {
                 from: "wardex@example.com".into(),
                 to: vec!["ops@example.com".into()],
                 username: None,
+                password: None,
                 use_tls: true,
+                implicit_tls: false,
+                ca_cert_pem: None,
+                allow_plaintext_auth: false,
             }),
             min_level: "Severe".into(),
         });
@@ -770,7 +1127,11 @@ mod tests {
                 from: "wardex@example.com".into(),
                 to: vec!["boss@example.com".into()],
                 username: None,
+                password: None,
                 use_tls: true,
+                implicit_tls: false,
+                ca_cert_pem: None,
+                allow_plaintext_auth: false,
             }),
             min_level: "Critical".into(),
         });
@@ -848,7 +1209,11 @@ mod tests {
                 from: "wardex@test.local".into(),
                 to: vec!["admin@test.local".into()],
                 username: None,
+                password: None,
                 use_tls: false,
+                implicit_tls: false,
+                ca_cert_pem: None,
+                allow_plaintext_auth: false,
             }),
             min_level: "Elevated".into(),
         });
@@ -904,5 +1269,452 @@ mod tests {
         engine.clear_delivery_state();
         assert!(engine.history().is_empty());
         assert!(engine.outbox().is_empty());
+    }
+
+    // ── SMTP protocol-level tests ─────────────────────────────────────
+
+    #[test]
+    fn dot_stuffing_escapes_leading_dots() {
+        let input = "Subject: test\r\n\r\n.leading dot\r\nnormal line\r\n..double dot";
+        let stuffed = dot_stuff(input);
+        assert!(stuffed.contains("\r\n..leading dot"));
+        assert!(stuffed.contains("\r\nnormal line"));
+        assert!(stuffed.contains("\r\n...double dot"));
+    }
+
+    #[test]
+    fn smtp_plain_delivery_against_fake_server() {
+        use std::io::{Read, Write};
+        use std::net::TcpListener;
+
+        let listener = TcpListener::bind("127.0.0.1:0").expect("bind fake smtp");
+        let port = listener.local_addr().expect("addr").port();
+        let handle = std::thread::spawn(move || {
+            let (mut stream, _) = listener.accept().expect("accept smtp connection");
+            stream
+                .write_all(b"220 fake.smtp ready\r\n")
+                .expect("greeting");
+
+            let mut buf = [0u8; 4096];
+            let mut received = String::new();
+            let mut read_line = |stream: &mut std::net::TcpStream, received: &mut String| {
+                loop {
+                    if let Some(pos) = received.find("\r\n") {
+                        let line: String = received.drain(..pos + 2).collect();
+                        return line;
+                    }
+                    let n = stream.read(&mut buf).unwrap_or(0);
+                    if n == 0 {
+                        return String::new();
+                    }
+                    received.push_str(&String::from_utf8_lossy(&buf[..n]));
+                }
+            };
+
+            let ehlo = read_line(&mut stream, &mut received);
+            assert!(ehlo.starts_with("EHLO"));
+            stream.write_all(b"250 fake.smtp\r\n").expect("ehlo reply");
+
+            let mail_from = read_line(&mut stream, &mut received);
+            assert!(mail_from.starts_with("MAIL FROM:"));
+            stream.write_all(b"250 OK\r\n").expect("mail reply");
+
+            let rcpt_to = read_line(&mut stream, &mut received);
+            assert!(rcpt_to.starts_with("RCPT TO:"));
+            stream.write_all(b"250 OK\r\n").expect("rcpt reply");
+
+            let data = read_line(&mut stream, &mut received);
+            assert!(data.starts_with("DATA"));
+            stream.write_all(b"354 go ahead\r\n").expect("data reply");
+
+            // Read until the lone "." terminator line.
+            loop {
+                let line = read_line(&mut stream, &mut received);
+                if line == ".\r\n" {
+                    break;
+                }
+                if line.is_empty() {
+                    break;
+                }
+            }
+            stream.write_all(b"250 queued\r\n").expect("data done");
+
+            let quit = read_line(&mut stream, &mut received);
+            assert!(quit.starts_with("QUIT"));
+        });
+
+        let cfg = SmtpConfig {
+            host: "127.0.0.1".into(),
+            port,
+            from: "wardex@test.local".into(),
+            to: vec!["ops@test.local".into()],
+            username: None,
+            password: None,
+            use_tls: false,
+            implicit_tls: false,
+            ca_cert_pem: None,
+            allow_plaintext_auth: false,
+        };
+        let result = smtp_send(&cfg, "Subject: hi\r\n\r\nbody");
+        handle.join().expect("server thread");
+        assert!(result.is_ok(), "smtp_send failed: {result:?}");
+    }
+
+    #[cfg(feature = "tls")]
+    /// Generates a self-signed certificate + key for the fake STARTTLS
+    /// server, using the `rcgen` dev-dependency (test-only; no production
+    /// code path depends on it).
+    fn self_signed_server_identity() -> (
+        rustls::pki_types::CertificateDer<'static>,
+        rustls::pki_types::PrivateKeyDer<'static>,
+        String,
+    ) {
+        let certified_key = rcgen::generate_simple_self_signed(vec!["127.0.0.1".to_string()])
+            .expect("generate self-signed cert");
+        let cert_der = certified_key.cert.der().clone();
+        let key_der = rustls::pki_types::PrivateKeyDer::Pkcs8(
+            rustls::pki_types::PrivatePkcs8KeyDer::from(certified_key.key_pair.serialize_der()),
+        );
+        let pem = certified_key.cert.pem();
+        (cert_der, key_der, pem)
+    }
+
+    #[cfg(feature = "tls")]
+    /// A fake SMTP server that advertises STARTTLS and AUTH, performs a real
+    /// TLS handshake with a self-signed certificate, and validates the
+    /// client authenticated with AUTH PLAIN before accepting the message.
+    fn spawn_starttls_fake_server() -> (u16, String, std::thread::JoinHandle<()>) {
+        use std::io::{Read, Write};
+        use std::net::TcpListener;
+
+        let (cert_der, key_der, cert_pem) = self_signed_server_identity();
+        let server_config = rustls::ServerConfig::builder()
+            .with_no_client_auth()
+            .with_single_cert(vec![cert_der], key_der)
+            .expect("build server tls config");
+        let server_config = std::sync::Arc::new(server_config);
+
+        let listener = TcpListener::bind("127.0.0.1:0").expect("bind fake smtps");
+        let port = listener.local_addr().expect("addr").port();
+
+        let handle = std::thread::spawn(move || {
+            let (mut stream, _) = listener.accept().expect("accept smtp connection");
+            stream
+                .write_all(b"220 fake.smtp starttls ready\r\n")
+                .expect("greeting");
+
+            let mut plain_buf = [0u8; 4096];
+            let mut plain_received = String::new();
+            let mut read_plain_line = |stream: &mut std::net::TcpStream, received: &mut String| {
+                loop {
+                    if let Some(pos) = received.find("\r\n") {
+                        let line: String = received.drain(..pos + 2).collect();
+                        return line;
+                    }
+                    let n = stream.read(&mut plain_buf).unwrap_or(0);
+                    if n == 0 {
+                        return String::new();
+                    }
+                    received.push_str(&String::from_utf8_lossy(&plain_buf[..n]));
+                }
+            };
+
+            let ehlo = read_plain_line(&mut stream, &mut plain_received);
+            assert!(ehlo.starts_with("EHLO"));
+            stream
+                .write_all(b"250-fake.smtp\r\n250 STARTTLS\r\n")
+                .expect("ehlo caps");
+
+            let starttls = read_plain_line(&mut stream, &mut plain_received);
+            assert!(starttls.starts_with("STARTTLS"));
+            stream.write_all(b"220 go ahead\r\n").expect("starttls ack");
+            assert!(
+                plain_received.is_empty(),
+                "no bytes may follow STARTTLS on the plaintext channel"
+            );
+
+            let conn = rustls::ServerConnection::new(server_config).expect("server tls connection");
+            let mut tls_stream = rustls::StreamOwned::new(conn, stream);
+
+            let mut tls_buf = [0u8; 4096];
+            let mut tls_received = String::new();
+            let mut read_tls_line = |stream: &mut rustls::StreamOwned<
+                rustls::ServerConnection,
+                std::net::TcpStream,
+            >,
+                                     received: &mut String| {
+                loop {
+                    if let Some(pos) = received.find("\r\n") {
+                        let line: String = received.drain(..pos + 2).collect();
+                        return line;
+                    }
+                    let n = stream.read(&mut tls_buf).unwrap_or(0);
+                    if n == 0 {
+                        return String::new();
+                    }
+                    received.push_str(&String::from_utf8_lossy(&tls_buf[..n]));
+                }
+            };
+
+            let ehlo2 = read_tls_line(&mut tls_stream, &mut tls_received);
+            assert!(ehlo2.starts_with("EHLO"));
+            tls_stream
+                .write_all(b"250-fake.smtp\r\n250 AUTH PLAIN LOGIN\r\n")
+                .expect("ehlo2 caps");
+
+            let auth = read_tls_line(&mut tls_stream, &mut tls_received);
+            assert!(auth.starts_with("AUTH PLAIN"));
+            tls_stream
+                .write_all(b"235 authenticated\r\n")
+                .expect("auth ok");
+
+            let mail_from = read_tls_line(&mut tls_stream, &mut tls_received);
+            assert!(mail_from.starts_with("MAIL FROM:"));
+            tls_stream.write_all(b"250 OK\r\n").expect("mail reply");
+
+            let rcpt_to = read_tls_line(&mut tls_stream, &mut tls_received);
+            assert!(rcpt_to.starts_with("RCPT TO:"));
+            tls_stream.write_all(b"250 OK\r\n").expect("rcpt reply");
+
+            let data = read_tls_line(&mut tls_stream, &mut tls_received);
+            assert!(data.starts_with("DATA"));
+            tls_stream
+                .write_all(b"354 go ahead\r\n")
+                .expect("data reply");
+
+            loop {
+                let line = read_tls_line(&mut tls_stream, &mut tls_received);
+                if line == ".\r\n" || line.is_empty() {
+                    break;
+                }
+            }
+            tls_stream.write_all(b"250 queued\r\n").expect("data done");
+
+            let quit = read_tls_line(&mut tls_stream, &mut tls_received);
+            assert!(quit.starts_with("QUIT"));
+        });
+        (port, cert_pem, handle)
+    }
+
+    #[cfg(feature = "tls")]
+    #[test]
+    fn smtp_starttls_with_auth_against_fake_tls_server() {
+        use std::io::Write as _;
+
+        let (port, cert_pem, handle) = spawn_starttls_fake_server();
+        let cfg = SmtpConfig {
+            host: "127.0.0.1".into(),
+            port,
+            from: "wardex@test.local".into(),
+            to: vec!["ops@test.local".into()],
+            username: Some("wardex-bot".into()),
+            password: Some("s3cret".into()),
+            use_tls: true,
+            implicit_tls: false,
+            ca_cert_pem: Some(cert_pem),
+            allow_plaintext_auth: false,
+        };
+        let result = smtp_send(&cfg, "Subject: hi over tls\r\n\r\nbody");
+        handle.join().expect("server thread");
+        assert!(result.is_ok(), "starttls smtp_send failed: {result:?}");
+        let _ = std::io::stdout().flush();
+    }
+
+    #[cfg(feature = "tls")]
+    #[test]
+    fn smtp_starttls_rejects_untrusted_certificate() {
+        // Same fake server, but the client does NOT trust its self-signed
+        // certificate: the handshake must fail rather than silently
+        // downgrading or accepting an unverified peer.
+        let (port, _cert_pem, handle) = spawn_starttls_fake_server();
+        let cfg = SmtpConfig {
+            host: "127.0.0.1".into(),
+            port,
+            from: "wardex@test.local".into(),
+            to: vec!["ops@test.local".into()],
+            username: None,
+            password: None,
+            use_tls: true,
+            implicit_tls: false,
+            ca_cert_pem: None, // not trusted -> must fail closed
+            allow_plaintext_auth: false,
+        };
+        let result = smtp_send(&cfg, "Subject: hi\r\n\r\nbody");
+        assert!(result.is_err(), "must not accept an unverified certificate");
+        // The fake server thread will be stuck mid-handshake since the
+        // client aborted; drop the handle without joining to avoid hanging
+        // the test suite.
+        drop(handle);
+    }
+
+    #[test]
+    fn smtp_refuses_auth_over_plaintext_by_default() {
+        use std::io::{Read, Write};
+        use std::net::TcpListener;
+
+        // Credentials configured but no TLS and no explicit opt-in: the
+        // documented guarantee ("password... never used over a plaintext
+        // connection") must hold, so `smtp_send` should fail before ever
+        // reaching the AUTH command.
+        let listener = TcpListener::bind("127.0.0.1:0").expect("bind fake smtp");
+        let port = listener.local_addr().expect("addr").port();
+        let handle = std::thread::spawn(move || {
+            let (mut stream, _) = listener.accept().expect("accept smtp connection");
+            stream
+                .write_all(b"220 fake.smtp ready\r\n")
+                .expect("greeting");
+            let mut buf = [0u8; 4096];
+            let mut received = String::new();
+            let mut read_line = |stream: &mut std::net::TcpStream, received: &mut String| {
+                loop {
+                    if let Some(pos) = received.find("\r\n") {
+                        let line: String = received.drain(..pos + 2).collect();
+                        return line;
+                    }
+                    let n = stream.read(&mut buf).unwrap_or(0);
+                    if n == 0 {
+                        return String::new();
+                    }
+                    received.push_str(&String::from_utf8_lossy(&buf[..n]));
+                }
+            };
+            let ehlo = read_line(&mut stream, &mut received);
+            assert!(ehlo.starts_with("EHLO"));
+            // Advertise AUTH so a client that (incorrectly) proceeds would
+            // have something to use — the test is that ours does not.
+            stream
+                .write_all(b"250-fake.smtp\r\n250 AUTH PLAIN LOGIN\r\n")
+                .expect("ehlo reply");
+            // The client should disconnect here without sending AUTH or
+            // MAIL FROM; best-effort read to observe that.
+            let next = read_line(&mut stream, &mut received);
+            assert!(
+                !next.starts_with("AUTH"),
+                "client must not send AUTH over plaintext, got: {next:?}"
+            );
+        });
+
+        let cfg = SmtpConfig {
+            host: "127.0.0.1".into(),
+            port,
+            from: "wardex@test.local".into(),
+            to: vec!["ops@test.local".into()],
+            username: Some("wardex-bot".into()),
+            password: Some("s3cret".into()),
+            use_tls: false,
+            implicit_tls: false,
+            ca_cert_pem: None,
+            allow_plaintext_auth: false,
+        };
+        let result = smtp_send(&cfg, "Subject: hi\r\n\r\nbody");
+        assert!(
+            result.is_err(),
+            "expected AUTH-over-plaintext to be refused"
+        );
+        assert!(result.unwrap_err().contains("plaintext"));
+        let _ = handle.join();
+    }
+
+    #[test]
+    fn smtp_allows_auth_over_plaintext_loopback_with_explicit_opt_in() {
+        use std::io::{Read, Write};
+        use std::net::TcpListener;
+
+        let listener = TcpListener::bind("127.0.0.1:0").expect("bind fake smtp");
+        let port = listener.local_addr().expect("addr").port();
+        let handle = std::thread::spawn(move || {
+            let (mut stream, _) = listener.accept().expect("accept smtp connection");
+            stream
+                .write_all(b"220 fake.smtp ready\r\n")
+                .expect("greeting");
+            let mut buf = [0u8; 4096];
+            let mut received = String::new();
+            let mut read_line = |stream: &mut std::net::TcpStream, received: &mut String| {
+                loop {
+                    if let Some(pos) = received.find("\r\n") {
+                        let line: String = received.drain(..pos + 2).collect();
+                        return line;
+                    }
+                    let n = stream.read(&mut buf).unwrap_or(0);
+                    if n == 0 {
+                        return String::new();
+                    }
+                    received.push_str(&String::from_utf8_lossy(&buf[..n]));
+                }
+            };
+            let ehlo = read_line(&mut stream, &mut received);
+            assert!(ehlo.starts_with("EHLO"));
+            stream
+                .write_all(b"250-fake.smtp\r\n250 AUTH PLAIN LOGIN\r\n")
+                .expect("ehlo reply");
+            let auth = read_line(&mut stream, &mut received);
+            assert!(auth.starts_with("AUTH PLAIN"));
+            stream.write_all(b"235 OK\r\n").expect("auth reply");
+            let mail_from = read_line(&mut stream, &mut received);
+            assert!(mail_from.starts_with("MAIL FROM:"));
+            stream.write_all(b"250 OK\r\n").expect("mail reply");
+            let rcpt_to = read_line(&mut stream, &mut received);
+            assert!(rcpt_to.starts_with("RCPT TO:"));
+            stream.write_all(b"250 OK\r\n").expect("rcpt reply");
+            let data = read_line(&mut stream, &mut received);
+            assert!(data.starts_with("DATA"));
+            stream.write_all(b"354 go ahead\r\n").expect("data reply");
+            loop {
+                let line = read_line(&mut stream, &mut received);
+                if line == ".\r\n" || line.is_empty() {
+                    break;
+                }
+            }
+            stream.write_all(b"250 queued\r\n").expect("data done");
+            let _ = read_line(&mut stream, &mut received);
+        });
+
+        let cfg = SmtpConfig {
+            host: "127.0.0.1".into(),
+            port,
+            from: "wardex@test.local".into(),
+            to: vec!["ops@test.local".into()],
+            username: Some("wardex-bot".into()),
+            password: Some("s3cret".into()),
+            use_tls: false,
+            implicit_tls: false,
+            ca_cert_pem: None,
+            allow_plaintext_auth: true,
+        };
+        let result = smtp_send(&cfg, "Subject: hi\r\n\r\nbody");
+        handle.join().expect("server thread");
+        assert!(result.is_ok(), "smtp_send failed: {result:?}");
+    }
+
+    #[test]
+    fn smtp_config_rejects_crlf_injection_in_addresses() {
+        let mut cfg = SmtpConfig {
+            host: "127.0.0.1".into(),
+            port: 25,
+            from: "wardex@test.local".into(),
+            to: vec!["ops@test.local".into()],
+            username: None,
+            password: None,
+            use_tls: false,
+            implicit_tls: false,
+            ca_cert_pem: None,
+            allow_plaintext_auth: false,
+        };
+        assert!(cfg.validate().is_ok());
+
+        cfg.from = "wardex@test.local\r\nBcc: evil@attacker.example".into();
+        assert!(cfg.validate().is_err());
+        cfg.from = "wardex@test.local".into();
+
+        cfg.to = vec!["ops@test.local\r\nX-Injected: 1".into()];
+        assert!(cfg.validate().is_err());
+        cfg.to = vec!["ops@test.local".into()];
+
+        cfg.from = "wardex@test.local>evil".into();
+        assert!(cfg.validate().is_err());
+        cfg.from = "wardex@test.local".into();
+
+        cfg.to = vec!["<ops@test.local".into()];
+        assert!(cfg.validate().is_err());
     }
 }

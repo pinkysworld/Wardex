@@ -39,12 +39,24 @@ pub fn ocsf_class_for(source: &str) -> u32 {
 pub struct LinuxCapabilities {
     pub kernel_version: String,
     pub distro: String,
+    /// Whether the running kernel is new enough / exposes the interfaces
+    /// for eBPF to be *possible* in principle. This has never meant "an
+    /// eBPF program is actually loaded" — see `kernel_telemetry` for the
+    /// accurate, currently-active backend report.
     pub has_ebpf: bool,
     pub has_auditd: bool,
     pub has_fanotify: bool,
     pub container_runtime: Option<String>,
     pub cgroup_version: u8,
     pub security_module: Option<String>,
+    /// Accurate, runtime-probed report of which kernel telemetry backend
+    /// is actually active for process and file events, and why. `None` on
+    /// non-Linux builds (this struct is Linux-only already, so it is only
+    /// ever `None` if the probe itself could not run for some reason —
+    /// kept `Option` for forward compatibility rather than because it is
+    /// expected in practice).
+    #[cfg(target_os = "linux")]
+    pub kernel_telemetry: Option<crate::kernel_linux::KernelTelemetryCapability>,
 }
 
 impl LinuxCapabilities {
@@ -63,6 +75,8 @@ impl LinuxCapabilities {
             security_module: detect_security_module(),
             kernel_version,
             distro,
+            #[cfg(target_os = "linux")]
+            kernel_telemetry: Some(crate::kernel_linux::detect_capability()),
         }
     }
 
@@ -1369,6 +1383,8 @@ mod tests {
             container_runtime: Some("docker".into()),
             cgroup_version: 2,
             security_module: Some("AppArmor".into()),
+            #[cfg(target_os = "linux")]
+            kernel_telemetry: None,
         };
         assert!(caps.has_ebpf);
         assert!(caps.has_fanotify);
@@ -1389,6 +1405,8 @@ mod tests {
             container_runtime: None,
             cgroup_version: 1,
             security_module: None,
+            #[cfg(target_os = "linux")]
+            kernel_telemetry: None,
         };
         let missing = caps.unavailable_features();
         assert_eq!(missing.len(), 4);
@@ -1529,6 +1547,8 @@ mod tests {
                 container_runtime: None,
                 cgroup_version: 2,
                 security_module: None,
+                #[cfg(target_os = "linux")]
+                kernel_telemetry: None,
             },
             processes: vec![],
             file_events: vec![],

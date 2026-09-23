@@ -1,6 +1,4 @@
 //! AES-256-GCM encrypted backup and restore with passphrase-derived keys.
-// aes-gcm 0.10 uses generic-array 0.14 which deprecated from_slice; suppressed until aes-gcm 0.11
-#![allow(deprecated)]
 
 use chrono::Utc;
 use serde::{Deserialize, Serialize};
@@ -28,21 +26,21 @@ fn derive_key(passphrase: &str, salt: &[u8; 16]) -> [u8; 32] {
 /// The plaintext is prefixed with a 4-byte big-endian length header before encryption,
 /// allowing post-decryption integrity verification that the data wasn't truncated.
 pub fn encrypt_backup_data(plaintext: &[u8], passphrase: &str) -> Result<Vec<u8>, String> {
-    use rand::Rng;
+    use rand::RngExt;
     let mut rng = rand::rng();
     // Generate random salt and nonce — never reuse (key, nonce) pair
     let salt: [u8; 16] = rng.random();
     let nonce_bytes: [u8; 12] = rng.random();
     let key = derive_key(passphrase, &salt);
     let cipher = Aes256Gcm::new_from_slice(&key).map_err(|e| format!("key error: {e}"))?;
-    let nonce = Nonce::from_slice(&nonce_bytes);
+    let nonce = Nonce::from(nonce_bytes);
     // Prefix plaintext with 4-byte length header for post-decryption verification
     let len = plaintext.len() as u32;
     let mut prefixed = Vec::with_capacity(4 + plaintext.len());
     prefixed.extend_from_slice(&len.to_be_bytes());
     prefixed.extend_from_slice(plaintext);
     let ciphertext = cipher
-        .encrypt(nonce, prefixed.as_slice())
+        .encrypt(&nonce, prefixed.as_slice())
         .map_err(|e| format!("encrypt error: {e}"))?;
     let mut output = Vec::with_capacity(16 + 12 + ciphertext.len());
     output.extend_from_slice(&salt);
@@ -60,9 +58,10 @@ pub fn decrypt_backup_data(encrypted: &[u8], passphrase: &str) -> Result<Vec<u8>
     let salt: [u8; 16] = encrypted[..16].try_into().map_err(|_| "bad salt")?;
     let key = derive_key(passphrase, &salt);
     let cipher = Aes256Gcm::new_from_slice(&key).map_err(|e| format!("key error: {e}"))?;
-    let nonce = Nonce::from_slice(&encrypted[16..28]);
+    let nonce_bytes: [u8; 12] = encrypted[16..28].try_into().map_err(|_| "bad nonce")?;
+    let nonce = Nonce::from(nonce_bytes);
     let prefixed = cipher
-        .decrypt(nonce, &encrypted[28..])
+        .decrypt(&nonce, &encrypted[28..])
         .map_err(|e| format!("decrypt error: {e}"))?;
     // Verify length header
     if prefixed.len() < 4 {
@@ -437,6 +436,30 @@ mod tests {
 
         let decrypted = super::decrypt_backup_data(&encrypted, passphrase).unwrap();
         assert_eq!(decrypted, plaintext);
+    }
+
+    /// Backup blob (salt(16) || nonce(12) || ciphertext) produced by
+    /// `encrypt_backup_data` under aes-gcm 0.10.3, with a fixed salt/nonce/
+    /// passphrase/plaintext, captured before bumping aes-gcm to a new major
+    /// version. Decrypting it must keep working forever so that backups
+    /// written by older Wardex releases stay restorable.
+    const PRE_AESGCM_UPGRADE_FIXTURE: &[u8] = &[
+        1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 202, 9,
+        144, 91, 177, 50, 122, 242, 124, 168, 143, 23, 71, 97, 125, 58, 224, 200, 96, 123, 154,
+        182, 211, 97, 128, 70, 139, 38, 50, 253, 225, 136, 79, 151, 102, 217, 212, 222, 192, 194,
+        13, 128, 53, 205, 72, 238, 189, 206, 157, 93, 246, 9, 108, 234, 32, 116, 11, 6, 53, 8, 28,
+        111, 239, 121, 104, 228, 205, 110, 141, 227, 118, 144, 23, 68, 4, 109, 136, 153, 177,
+    ];
+    const PRE_AESGCM_UPGRADE_PASSPHRASE: &str = "fixture-passphrase-v1";
+    const PRE_AESGCM_UPGRADE_PLAINTEXT: &[u8] =
+        b"golden fixture plaintext for aes-gcm backward compatibility";
+
+    #[test]
+    fn decrypt_backup_data_accepts_pre_upgrade_fixture() {
+        let decrypted =
+            super::decrypt_backup_data(PRE_AESGCM_UPGRADE_FIXTURE, PRE_AESGCM_UPGRADE_PASSPHRASE)
+                .unwrap();
+        assert_eq!(decrypted, PRE_AESGCM_UPGRADE_PLAINTEXT);
     }
 
     #[test]

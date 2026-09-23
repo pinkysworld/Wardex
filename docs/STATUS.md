@@ -4,7 +4,7 @@
 
 - **Version:** `1.0.30`
 - **Positioning:** private-cloud XDR and SIEM platform with enterprise detection engineering, malware scanning, analyst workflows, fleet operations, behavioural analytics, and automated incident response
-- **Source footprint:** 174 Rust source modules (`server.rs` decomposition target met — `server.rs` is now 7,600 lines after extracting dedicated `server_*` modules including dynamic fallback route delegation)
+- **Source footprint:** 196 Rust source modules (`server.rs` decomposition target met — `server.rs` is now 7,600 lines after extracting dedicated `server_*` modules including dynamic fallback route delegation)
 - **API contract:** versioned OpenAPI surface with REST, GraphQL, live `/api/openapi.json` export, generated SDK parity diagnostics, authenticated-by-default API route classification, cursor page contracts, release observability/preflight proof APIs, production assurance endpoints, malware scan and response-action contracts, source-aware alert analysis, operator-trust workspaces, alert feedback/evidence-chain contracts, Detection Trust scoring and draft-only tuning APIs, detection validation lab APIs, response safety preview/verification APIs with execution-audit continuity, agent enrollment-token flows, connector marketplace summaries, operations health snapshots, and release verification readiness endpoints with evidence freshness metadata
 - **Verification:** release preflight gating for Rust formatting, Clippy, admin-console linting, admin-console formatting, admin-console build, release-doc validation, workspace hygiene, and panic-policy compliance, plus Rust integration coverage, focused Detection Trust endpoint tests, session-cookie exchange tests, collector lifecycle tests, remediation change-review tests, Command Center summary/action-drawer tests, Help & Docs unit coverage, assistant/ticketing/enterprise API regression tests, operator trust workspace unit coverage, SDK regeneration checks, strict Playwright a11y smoke coverage, local Developer ID `.p12` signing validation, focused admin-console regression coverage, thread pullout regression coverage, managed release acceptance coverage, and Launchpad coverage for proof freshness badges and persisted snapshot evidence state
 - **Production hardening:** 100% (59/59 controls implemented)
@@ -15,8 +15,12 @@
 
 ### Deep OS-native monitoring
 
-- Unified kernel-event stream normalising eBPF (Linux), ESF (macOS), and ETW (Windows) telemetry
-- 22 event kinds: process lifecycle, file ops, network, registry, AMSI, WMI persistence, TCC, Gatekeeper, SELinux/AppArmor denials, container events
+- Unified kernel-event stream normalising real kernel-pushed telemetry across all three OS families, each falling back to polling per-domain (and saying why) when the required privilege/entitlement is missing:
+  - **Linux** — `CN_PROC` netlink process connector for exec/fork/exit/uid-change, fanotify/inotify for file activity, falling back to `/proc` polling (see `docs/kernel-telemetry-linux.md`)
+  - **Windows** — a real ETW consumer (`ferrisetw`) for `Microsoft-Windows-Kernel-Process`/`-Kernel-File`/`-Kernel-Network` plus DNS-Client and PowerShell ScriptBlock logging, requiring an elevated process; falls back to WMI/PowerShell/`reg.exe` polling otherwise (see `docs/runbooks/windows-agent.md`). AMSI is consumed via its ETW provider (verdicts from whichever provider is installed), not implemented as an AMSI provider (COM DLL) itself
+  - **macOS** — a real Endpoint Security Framework client behind the off-by-default `macos-es` cargo feature, requiring Apple's `com.apple.developer.endpoint-security.client` entitlement, a signed binary, root, and TCC Full Disk Access; falls back to `ps`/`lsof` polling otherwise (see `docs/runbooks/macos-agent.md`)
+  - eBPF is not implemented; see `docs/kernel-telemetry-linux.md`
+- 23 event kinds: process lifecycle, file ops, network, registry, AMSI, WMI persistence, PowerShell ScriptBlock execution, TCC, Gatekeeper, SELinux/AppArmor denials, container events
 - Automatic MITRE ATT&CK technique tagging for kernel events
 - Thread-safe ring-buffer with capacity management and type-filtered queries
 

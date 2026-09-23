@@ -1,5 +1,16 @@
 # Wasm Extension Surface Specification
 
+> **Superseded.** This is the original design sketch for R17. The shipped
+> implementation is `src/wasm_runtime.rs`, built on `wasmi` (real
+> WebAssembly, not the binary-struct/`baseline_mean` API sketched below).
+> For the current, authoritative contract and rationale, see
+> [`docs/WASM_ABI.md`](WASM_ABI.md) and [`docs/WASM_TUTORIAL.md`](WASM_TUTORIAL.md).
+> This document is kept for historical context on the original design
+> goals, which the implementation still honors (sandboxed, no
+> filesystem/network, resource-accounted, narrow typed API surface) even
+> where specific function names and data layouts below differ from what
+> was actually built.
+
 Design document for R17 (Wasm-Based Extensible Detection and Response Policies).
 
 ## Goals

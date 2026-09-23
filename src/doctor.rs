@@ -59,6 +59,12 @@ pub fn run() -> Vec<Check> {
         check_service_layout(),
         check_support_bundle_digest(),
         check_redaction_policy(),
+        check_kernel_telemetry(),
+        check_container_runtime(),
+        check_search_index(),
+        check_wasm_extensions(),
+        check_windows_telemetry(),
+        check_macos_telemetry(),
     ]
 }
 
@@ -115,6 +121,9 @@ pub fn format_report_json(checks: &[Check]) -> String {
             "exists": config_path.exists(),
         },
         "service_health": service_health_summary(),
+        "kernel_telemetry": kernel_telemetry_summary(),
+        "windows_telemetry": windows_telemetry_summary(),
+        "macos_telemetry": macos_telemetry_summary(),
         "logs": {
             "locations": logs,
         },
@@ -183,6 +192,56 @@ fn check_install_layout() -> Check {
     }
 }
 
+/// Static preflight check for the WebAssembly extension runtime: whether
+/// it is enabled, whether its extensions directory exists, and how many
+/// `*.wasm` modules are present there. This does not load or execute any
+/// extension (that happens at server startup); it only reports on what
+/// *would* be loaded, using the resolved runtime config.
+fn check_wasm_extensions() -> Check {
+    let path = config::runtime_config_path();
+    let settings = match Config::load_from_path(&path) {
+        Ok(cfg) => cfg.wasm_runtime,
+        Err(_) => crate::wasm_runtime::WasmRuntimeSettings::default(),
+    };
+    if !settings.enabled {
+        return Check {
+            name: "WebAssembly extensions",
+            status: Status::Info,
+            detail: "disabled (config wasm_runtime.enabled = false)".to_string(),
+        };
+    }
+    let dir = Path::new(&settings.extensions_dir);
+    if !dir.exists() {
+        return Check {
+            name: "WebAssembly extensions",
+            status: Status::Warn,
+            detail: format!(
+                "enabled, but extensions_dir {} does not exist",
+                dir.display()
+            ),
+        };
+    }
+    let count = std::fs::read_dir(dir)
+        .map(|entries| {
+            entries
+                .filter_map(|e| e.ok())
+                .filter(|e| e.path().extension().and_then(|x| x.to_str()) == Some("wasm"))
+                .count()
+        })
+        .unwrap_or(0);
+    Check {
+        name: "WebAssembly extensions",
+        status: Status::Ok,
+        detail: format!(
+            "enabled; {} module(s) in {} (fuel_limit={}, max_memory_pages={})",
+            count,
+            dir.display(),
+            settings.fuel_limit,
+            settings.max_memory_pages
+        ),
+    }
+}
+
 fn check_config() -> Check {
     let path = config::runtime_config_path();
     if !path.exists() {
@@ -206,6 +265,72 @@ fn check_config() -> Check {
             status: Status::Fail,
             detail: format!("{}: {e}", path.display()),
         },
+    }
+}
+
+/// Docker/Podman and in-cluster Kubernetes reachability, for
+/// `[container]` in the config file.
+fn check_container_runtime() -> Check {
+    let path = config::runtime_config_path();
+    let config = if path.exists() {
+        Config::load_from_path(&path).unwrap_or_default()
+    } else {
+        Config::default()
+    };
+
+    let report = crate::container_runtime::probe_status(&config.container);
+    use crate::container_runtime::RuntimeStatus;
+
+    if report.docker_status == RuntimeStatus::Disabled
+        && report.kubernetes_status == RuntimeStatus::Disabled
+    {
+        return Check {
+            name: "Container/Kubernetes sources",
+            status: Status::Info,
+            detail: "docker_enabled=false, kubernetes_enabled=false (not configured)".into(),
+        };
+    }
+
+    let mut parts = Vec::new();
+    let mut any_fail = false;
+    match report.docker_status {
+        RuntimeStatus::Disabled => {}
+        RuntimeStatus::Reachable => parts.push(format!(
+            "docker reachable at {} ({})",
+            report.docker_socket_path,
+            report
+                .docker_server_version
+                .as_deref()
+                .unwrap_or("unknown version")
+        )),
+        RuntimeStatus::Unreachable => {
+            any_fail = true;
+            parts.push(format!(
+                "docker unreachable at {}: {}",
+                report.docker_socket_path,
+                report.docker_error.as_deref().unwrap_or("unknown error")
+            ));
+        }
+    }
+    match report.kubernetes_status {
+        RuntimeStatus::Disabled => {}
+        RuntimeStatus::Reachable => parts.push("kubernetes in-cluster credentials found".into()),
+        RuntimeStatus::Unreachable => {
+            any_fail = true;
+            parts.push(format!(
+                "kubernetes unreachable: {}",
+                report
+                    .kubernetes_error
+                    .as_deref()
+                    .unwrap_or("unknown error")
+            ));
+        }
+    }
+
+    Check {
+        name: "Container/Kubernetes sources",
+        status: if any_fail { Status::Warn } else { Status::Ok },
+        detail: parts.join("; "),
     }
 }
 
@@ -336,6 +461,80 @@ fn check_support_bundle_digest() -> Check {
     }
 }
 
+/// Report which kernel telemetry backend is actually active for process
+/// and file events on Linux, and why — instead of the old single
+/// `has_ebpf` boolean, which only meant "the kernel is new enough" and was
+/// easy to misread as "eBPF telemetry is running" (it never was; Linux
+/// collection has always been /proc & /sys polling plus, now, real
+/// kernel-pushed CN_PROC/fanotify/inotify events where privileges allow).
+#[cfg(target_os = "linux")]
+fn check_kernel_telemetry() -> Check {
+    let cap = crate::kernel_linux::detect_capability();
+    let status = if cap.fully_degraded() {
+        Status::Warn
+    } else {
+        Status::Ok
+    };
+    Check {
+        name: "Kernel telemetry (Linux)",
+        status,
+        detail: cap.summary(),
+    }
+}
+
+#[cfg(not(target_os = "linux"))]
+fn check_kernel_telemetry() -> Check {
+    Check {
+        name: "Kernel telemetry (Linux)",
+        status: Status::Info,
+        detail: format!(
+            "not applicable on {} — this backend selection only applies on Linux",
+            std::env::consts::OS
+        ),
+    }
+}
+
+/// Report which Windows telemetry backend is actually active — a real ETW
+/// consumer, or the pre-existing WMI/PowerShell polling collector — and
+/// why. `kernel_windows::detect_capability()` is unconditional (it
+/// internally reports "not on Windows" elsewhere), so this needs no
+/// `cfg(windows)` split the way `check_kernel_telemetry` does.
+fn check_windows_telemetry() -> Check {
+    let cap = crate::kernel_windows::detect_capability();
+    let status = if !cfg!(windows) {
+        Status::Info
+    } else if cap.fully_degraded() {
+        Status::Warn
+    } else {
+        Status::Ok
+    };
+    Check {
+        name: "Kernel telemetry (Windows ETW)",
+        status,
+        detail: cap.summary(),
+    }
+}
+
+/// Report which macOS telemetry backend is actually active — a real
+/// Endpoint Security client (only ever possible with the `macos-es`
+/// feature, root, and Apple's entitlement), or the pre-existing
+/// `ps`/`lsof` polling collector — and why.
+fn check_macos_telemetry() -> Check {
+    let cap = crate::kernel_macos::detect_capability();
+    let status = if !cfg!(target_os = "macos") {
+        Status::Info
+    } else if cap.fully_degraded() {
+        Status::Warn
+    } else {
+        Status::Ok
+    };
+    Check {
+        name: "Kernel telemetry (macOS Endpoint Security)",
+        status,
+        detail: cap.summary(),
+    }
+}
+
 fn check_redaction_policy() -> Check {
     Check {
         name: "Redaction summary",
@@ -343,6 +542,47 @@ fn check_redaction_policy() -> Check {
         detail:
             "Support snapshots redact authorization, cookie, API key, token, and secret fields."
                 .to_string(),
+    }
+}
+
+/// Report the on-disk full-text search index's health without opening the
+/// live Tantivy index (which may be locked by a running server). Reads the
+/// same `wardex_search_meta.json` sidecar the running server maintains.
+fn check_search_index() -> Check {
+    let index_path = Config::load_from_path(&config::runtime_config_path())
+        .ok()
+        .map(|c| c.search.index_path)
+        .unwrap_or_else(|| crate::search::EventStoreConfig::default().index_path);
+
+    match crate::search::read_index_meta(&index_path) {
+        Some(meta) => {
+            let status = if meta.schema_version == crate::search::SEARCH_SCHEMA_VERSION {
+                Status::Ok
+            } else {
+                Status::Warn
+            };
+            Check {
+                name: "Search index (Tantivy)",
+                status,
+                detail: format!(
+                    "{} · {} documents · {:.1} MiB · schema v{} · last commit: {}",
+                    index_path,
+                    meta.total_events,
+                    meta.index_size_bytes as f64 / (1024.0 * 1024.0),
+                    meta.schema_version,
+                    meta.last_commit
+                        .map(|t| t.to_rfc3339())
+                        .unwrap_or_else(|| "never".to_string()),
+                ),
+            }
+        }
+        None => Check {
+            name: "Search index (Tantivy)",
+            status: Status::Info,
+            detail: format!(
+                "{index_path}: no index found yet (created on first server start or ingest)"
+            ),
+        },
     }
 }
 
@@ -407,6 +647,53 @@ fn install_layout() -> serde_json::Value {
         "root": root.display().to_string(),
         "binary": exe.display().to_string(),
         "config_path": config::runtime_config_path().display().to_string(),
+    })
+}
+
+#[cfg(target_os = "linux")]
+fn kernel_telemetry_summary() -> serde_json::Value {
+    let cap = crate::kernel_linux::detect_capability();
+    serde_json::json!({
+        "applicable": true,
+        "process_backend": format!("{:?}", cap.process_backend),
+        "process_backend_reason": cap.process_backend_reason,
+        "file_backend": format!("{:?}", cap.file_backend),
+        "file_backend_reason": cap.file_backend_reason,
+        "has_cap_net_admin": cap.has_cap_net_admin,
+        "has_cap_sys_admin": cap.has_cap_sys_admin,
+        "ebpf_kernel_capable": cap.ebpf_kernel_capable,
+        "ebpf_active": cap.ebpf_active,
+        "fully_degraded": cap.fully_degraded(),
+    })
+}
+
+#[cfg(not(target_os = "linux"))]
+fn kernel_telemetry_summary() -> serde_json::Value {
+    serde_json::json!({ "applicable": false })
+}
+
+fn windows_telemetry_summary() -> serde_json::Value {
+    let cap = crate::kernel_windows::detect_capability();
+    serde_json::json!({
+        "applicable": cfg!(windows),
+        "backend": format!("{:?}", cap.backend),
+        "backend_reason": cap.backend_reason,
+        "is_elevated": cap.is_elevated,
+        "amsi_etw_active": cap.amsi_etw_active,
+        "amsi_provider_active": cap.amsi_provider_active,
+        "fully_degraded": cap.fully_degraded(),
+    })
+}
+
+fn macos_telemetry_summary() -> serde_json::Value {
+    let cap = crate::kernel_macos::detect_capability();
+    serde_json::json!({
+        "applicable": cfg!(target_os = "macos"),
+        "backend": format!("{:?}", cap.backend),
+        "backend_reason": cap.backend_reason,
+        "compiled_with_es_feature": cap.compiled_with_es_feature,
+        "is_root": cap.is_root,
+        "fully_degraded": cap.fully_degraded(),
     })
 }
 

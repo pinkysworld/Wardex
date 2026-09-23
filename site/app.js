@@ -4,9 +4,9 @@
    ═══════════════════════════════════════════════════════════════════════════ */
 
 const RELEASE_VERSION = "1.0.30";
-const MODULE_COUNT = "174";
-const API_COUNT = "262";
-const TEST_COUNT = "2172";
+const MODULE_COUNT = "196";
+const API_COUNT = "268";
+const TEST_COUNT = "2390";
 
 const SITE_ROUTES = [
   { id: "overview", label: "Overview", file: "index.html", slug: "", nav: "primary" },
@@ -453,7 +453,7 @@ function initScrollReveal() {
         observer.unobserve(entry.target);
       }
     });
-  }, { threshold: 0.08, rootMargin: "0px 0px -40px 0px" });
+  }, { threshold: 0, rootMargin: "0px 0px 120px 0px" });
 
   targets.forEach((target) => {
     target.classList.add("reveal");
@@ -464,18 +464,36 @@ function initScrollReveal() {
     }
     observer.observe(target);
   });
+
+  // Safety net: content must never stay permanently invisible if the
+  // observer fails to fire (throttled tabs, odd viewport states, older
+  // browsers). Force everything visible shortly after load regardless.
+  window.setTimeout(() => {
+    document.querySelectorAll(".reveal:not(.visible)").forEach((el) => {
+      el.classList.add("visible");
+    });
+  }, 1800);
 }
 
 function initCopyButtons() {
   const targets = document.querySelectorAll(".terminal-snippet, .console-output, pre.copyable");
   targets.forEach((el) => {
-    if (el.querySelector(".copy-btn")) return;
+    // A console block's copy action belongs in its chrome/title bar, not
+    // inline with the code — appending it inside the <pre> itself would
+    // sit directly after the last character of code, overlapping it.
+    const chrome = el.classList.contains("console-output")
+      ? el.previousElementSibling && el.previousElementSibling.classList.contains("console-chrome")
+        ? el.previousElementSibling
+        : null
+      : null;
+    const mount = chrome || el;
+    if (mount.querySelector(".copy-btn")) return;
     const code = el.querySelector("code") || el;
     const btn = document.createElement("button");
     btn.type = "button";
     btn.className = "copy-btn";
     btn.setAttribute("aria-label", "Copy to clipboard");
-    btn.innerHTML = `<svg width="14" height="14" viewBox="0 0 16 16" fill="currentColor" aria-hidden="true"><path d="M4 1.5A1.5 1.5 0 0 1 5.5 0h7A1.5 1.5 0 0 1 14 1.5v10a1.5 1.5 0 0 1-1.5 1.5H10v1.5A1.5 1.5 0 0 1 8.5 16h-7A1.5 1.5 0 0 1 0 14.5v-10A1.5 1.5 0 0 1 1.5 3H4V1.5zm1 0v1h7.5a1.5 1.5 0 0 1 1.5 1.5V11h.5a.5.5 0 0 0 .5-.5v-9a.5.5 0 0 0-.5-.5h-7a.5.5 0 0 0-.5.5zM1.5 4a.5.5 0 0 0-.5.5v10a.5.5 0 0 0 .5.5h7a.5.5 0 0 0 .5-.5v-10a.5.5 0 0 0-.5-.5h-7z"/></svg><span>Copy</span>`;
+    btn.innerHTML = `<svg width="13" height="13" viewBox="0 0 16 16" fill="currentColor" aria-hidden="true"><path d="M4 1.5A1.5 1.5 0 0 1 5.5 0h7A1.5 1.5 0 0 1 14 1.5v10a1.5 1.5 0 0 1-1.5 1.5H10v1.5A1.5 1.5 0 0 1 8.5 16h-7A1.5 1.5 0 0 1 0 14.5v-10A1.5 1.5 0 0 1 1.5 3H4V1.5zm1 0v1h7.5a1.5 1.5 0 0 1 1.5 1.5V11h.5a.5.5 0 0 0 .5-.5v-9a.5.5 0 0 0-.5-.5h-7a.5.5 0 0 0-.5.5zM1.5 4a.5.5 0 0 0-.5.5v10a.5.5 0 0 0 .5.5h7a.5.5 0 0 0 .5-.5v-10a.5.5 0 0 0-.5-.5h-7z"/></svg><span>Copy</span>`;
     btn.addEventListener("click", async () => {
       const text = (code.innerText || code.textContent || "").trim();
       try {
@@ -495,7 +513,7 @@ function initCopyButtons() {
         sel.addRange(range);
       }
     });
-    el.appendChild(btn);
+    mount.appendChild(btn);
   });
 }
 

@@ -1,5 +1,5 @@
 import { useState, useCallback, useEffect, useRef, lazy, Suspense } from 'react';
-import { Routes, Route, useNavigate, useLocation, Navigate, NavLink, Link } from 'react-router-dom';
+import { Routes, Route, useNavigate, useLocation, Navigate, NavLink } from 'react-router-dom';
 import { useAuth, useTheme, useRole, useApi, useInterval } from './hooks.jsx';
 import * as api from './api.js';
 import ErrorBoundary from './components/ErrorBoundary.jsx';
@@ -18,6 +18,25 @@ import {
   safeStorageJsonSet,
   safeStorageSet,
 } from './safeStorage.js';
+import {
+  IconChevronLeft,
+  IconChevronRight,
+  IconChevronDown,
+  IconClose,
+  IconHelp,
+  IconInbox,
+  IconKeyboard,
+  IconLink,
+  IconLogOut,
+  IconMenu,
+  IconMoon,
+  IconMore,
+  IconSearch,
+  IconStar,
+  IconSun,
+  SectionIcon,
+  sectionIconName,
+} from './components/icons.jsx';
 
 // ── Recent Items (persisted in localStorage) ─────────────────
 const MAX_RECENT = 10;
@@ -46,6 +65,84 @@ function normalizeSsoProviders(providers) {
     seen.add(key);
     return true;
   });
+}
+
+/** Topbar viewport breakpoint (px) above which secondary actions (Help For
+ * View, Share Link) render inline instead of collapsing into the "More"
+ * overflow menu. */
+const WIDE_TOPBAR_BREAKPOINT = 1280;
+
+function isWideTopbarViewport() {
+  return typeof window !== 'undefined' && window.innerWidth >= WIDE_TOPBAR_BREAKPOINT;
+}
+
+/** Phone-width breakpoint (px): at or below it Search and Pin View also
+ * move into the "More" menu so the topbar fits on one row. */
+const COMPACT_TOPBAR_BREAKPOINT = 768;
+
+function isCompactTopbarViewport() {
+  return typeof window !== 'undefined' && window.innerWidth <= COMPACT_TOPBAR_BREAKPOINT;
+}
+
+/** Tracks a viewport predicate, re-evaluated on resize. */
+function useViewportMatch(predicate) {
+  const [matches, setMatches] = useState(predicate);
+  useEffect(() => {
+    if (typeof window === 'undefined') return undefined;
+    const handleResize = () => setMatches(predicate());
+    window.addEventListener('resize', handleResize);
+    return () => window.removeEventListener('resize', handleResize);
+  }, [predicate]);
+  return matches;
+}
+
+/** True once the viewport is wide enough to show topbar secondary actions
+ * inline rather than behind the "More" overflow menu. */
+function useIsWideTopbar() {
+  return useViewportMatch(isWideTopbarViewport);
+}
+
+/** True on phone-width viewports, where every secondary topbar action lives
+ * in the "More" menu. */
+function useIsCompactTopbar() {
+  return useViewportMatch(isCompactTopbarViewport);
+}
+
+/**
+ * Shared dismissal behaviour for a popover/menu: closes on Escape (moving
+ * focus back to the trigger that opened it) and on a pointer press outside
+ * both the trigger and the popover content.
+ *
+ * `open` is whatever "is this open" value the caller already tracks
+ * (a boolean, or a location-key comparison); `onClose` should clear it.
+ */
+function useDismissablePopover(open, onClose, { triggerRef, contentRef }) {
+  useEffect(() => {
+    if (!open) return undefined;
+
+    const handleKeyDown = (event) => {
+      if (event.key !== 'Escape') return;
+      event.stopPropagation();
+      onClose();
+      triggerRef.current?.focus();
+    };
+
+    const handlePointerDown = (event) => {
+      const target = event.target;
+      if (triggerRef.current?.contains(target)) return;
+      if (contentRef.current?.contains(target)) return;
+      onClose();
+    };
+
+    document.addEventListener('keydown', handleKeyDown, true);
+    document.addEventListener('mousedown', handlePointerDown, true);
+    document.addEventListener('touchstart', handlePointerDown, true);
+    return () => {
+      document.removeEventListener('keydown', handleKeyDown, true);
+      document.removeEventListener('mousedown', handlePointerDown, true);
+      document.removeEventListener('touchstart', handlePointerDown, true);
+    };
+  }, [open, onClose, triggerRef, contentRef]);
 }
 
 function useRecentItems() {
@@ -92,38 +189,6 @@ function currentSectionForLocation(sections, location) {
   return sections.find((section) => sectionMatchesLocation(section, location)) || sections[0];
 }
 
-function Breadcrumbs({ sections, location }) {
-  const current = currentSectionForLocation(sections, location);
-  if (!current || current.path === '/') return null;
-  return (
-    <nav className="breadcrumbs" aria-label="Breadcrumb">
-      <ol
-        style={{
-          display: 'flex',
-          gap: 4,
-          listStyle: 'none',
-          margin: 0,
-          padding: 0,
-          fontSize: 12,
-          color: 'var(--text-secondary)',
-        }}
-      >
-        <li>
-          <Link className="btn-link" to="/">
-            Dashboard
-          </Link>
-        </li>
-        <li aria-hidden="true" style={{ margin: '0 2px' }}>
-          ›
-        </li>
-        <li aria-current="page" style={{ fontWeight: 600, color: 'var(--text)' }}>
-          {current.label}
-        </li>
-      </ol>
-    </nav>
-  );
-}
-
 const Dashboard = lazy(() => import('./components/Dashboard.jsx'));
 const OperatorLaunchpad = lazy(() => import('./components/OperatorLaunchpad.jsx'));
 const LiveMonitor = lazy(() => import('./components/LiveMonitor.jsx'));
@@ -168,128 +233,111 @@ const MalwareTrustCenter = lazy(() =>
 );
 
 const SECTIONS = [
-  { id: 'dashboard', path: '/', label: 'Dashboard', shortLabel: 'DB', minRole: 'viewer' },
+  { id: 'dashboard', path: '/', label: 'Dashboard', minRole: 'viewer' },
   {
     id: 'operator-launchpad',
     path: '/launchpad',
     label: 'Operator Launchpad',
-    shortLabel: 'OP',
     minRole: 'viewer',
   },
   {
     id: 'live-monitor',
     path: '/monitor',
     label: 'Live Monitor',
-    shortLabel: 'LM',
     minRole: 'viewer',
   },
   {
     id: 'threat-detection',
     path: '/detection',
     label: 'Threat Detection',
-    shortLabel: 'TD',
     minRole: 'analyst',
   },
   {
     id: 'fleet-agents',
     path: '/fleet',
     label: 'Fleet & Agents',
-    shortLabel: 'FA',
     minRole: 'viewer',
   },
   {
     id: 'security-policy',
     path: '/policy',
     label: 'Security Policy',
-    shortLabel: 'SP',
     minRole: 'analyst',
   },
   {
     id: 'soc-workbench',
     path: '/soc',
     label: 'SOC Workbench',
-    shortLabel: 'SOC',
     minRole: 'analyst',
   },
   {
     id: 'command-center',
     path: '/command',
     label: 'Command Center',
-    shortLabel: 'CMD',
     minRole: 'analyst',
   },
   {
     id: 'assistant-workspace',
     path: '/assistant',
     label: 'Analyst Assistant',
-    shortLabel: 'AST',
     minRole: 'analyst',
   },
   {
     id: 'malware-scanning',
     path: '/malware',
     label: 'Malware Scanning',
-    shortLabel: 'AV',
     minRole: 'analyst',
   },
   {
     id: 'detection-lab',
     path: '/detection-lab',
     label: 'Detection Lab',
-    shortLabel: 'LAB',
     minRole: 'analyst',
   },
   {
     id: 'response-safety',
     path: '/response-safety',
     label: 'Response Safety',
-    shortLabel: 'SAFE',
     minRole: 'analyst',
   },
   {
     id: 'integrations',
     path: '/integrations',
     label: 'Integrations',
-    shortLabel: 'INT',
     minRole: 'analyst',
   },
   {
     id: 'operations-health',
     path: '/operations-health',
     label: 'Operations Health',
-    shortLabel: 'OPS',
     minRole: 'viewer',
   },
   {
     id: 'infrastructure',
     path: '/infrastructure',
     label: 'Infrastructure',
-    shortLabel: 'INF',
     minRole: 'analyst',
   },
   {
     id: 'reports-exports',
     path: '/reports',
     label: 'Reports & Exports',
-    shortLabel: 'REP',
     minRole: 'viewer',
   },
-  { id: 'settings', path: '/settings', label: 'Settings', shortLabel: 'CFG', minRole: 'admin' },
-  { id: 'help-docs', path: '/help', label: 'Help & Docs', shortLabel: 'DOC', minRole: 'viewer' },
-  { id: 'ueba', path: '/ueba', label: 'UEBA', shortLabel: 'UBA', minRole: 'analyst' },
-  { id: 'ndr', path: '/ndr', label: 'NDR', shortLabel: 'NDR', minRole: 'analyst' },
+  { id: 'settings', path: '/settings', label: 'Settings', minRole: 'admin' },
+  { id: 'help-docs', path: '/help', label: 'Help & Docs', minRole: 'viewer' },
+  { id: 'ueba', path: '/ueba', label: 'UEBA', minRole: 'analyst' },
+  { id: 'ndr', path: '/ndr', label: 'NDR', minRole: 'analyst' },
   {
     id: 'email-security',
     path: '/email-security',
     label: 'Email Security',
-    shortLabel: 'EML',
     minRole: 'analyst',
   },
   {
     id: 'attack-graph',
     path: '/attack-graph',
     label: 'Attack Graph',
-    shortLabel: 'ATK',
     minRole: 'analyst',
   },
 ];
@@ -386,15 +434,43 @@ export default function App() {
   });
   const [showShortcuts, setShowShortcuts] = useState(false);
   const [showInboxLocationKey, setShowInboxLocationKey] = useState(null);
-  const [showTopbarActionsLocationKey, setShowTopbarActionsLocationKey] = useState(null);
+  const [showTopbarActions, setShowTopbarActions] = useState(false);
   const [pinnedSections, setPinnedSections] = useState(() => readStoredPinnedSections());
   const pinnedSectionsRef = useRef(pinnedSections);
   const showInbox = showInboxLocationKey === location.key;
-  const showTopbarActions = showTopbarActionsLocationKey === location.key;
+  const isWideTopbar = useIsWideTopbar();
+  const isCompactTopbar = useIsCompactTopbar();
+
+  const inboxTriggerRef = useRef(null);
+  const inboxPopoverRef = useRef(null);
+  const topbarActionsTriggerRef = useRef(null);
+  const topbarActionsMenuRef = useRef(null);
 
   useEffect(() => {
     pinnedSectionsRef.current = pinnedSections;
   }, [pinnedSections]);
+
+  // Close transient topbar popovers whenever the route changes. Gated on
+  // `location.pathname` rather than `location.key`: some lazy routes
+  // re-navigate (replacing the history entry) on mount, which would
+  // immediately re-close a menu the user just opened on the new page if
+  // this were keyed off `location.key` instead.
+  useEffect(() => {
+    setShowTopbarActions(false);
+    setShowInboxLocationKey(null);
+  }, [location.pathname]);
+
+  const closeTopbarActions = useCallback(() => setShowTopbarActions(false), []);
+  const closeInbox = useCallback(() => setShowInboxLocationKey(null), []);
+
+  useDismissablePopover(showTopbarActions, closeTopbarActions, {
+    triggerRef: topbarActionsTriggerRef,
+    contentRef: topbarActionsMenuRef,
+  });
+  useDismissablePopover(showInbox, closeInbox, {
+    triggerRef: inboxTriggerRef,
+    contentRef: inboxPopoverRef,
+  });
 
   useEffect(() => {
     if (authenticated) return undefined;
@@ -697,13 +773,12 @@ export default function App() {
             aria-expanded={!sidebarCollapsed}
             aria-controls="sidebar-nav"
           >
-            {sidebarCollapsed ? '→' : '←'}
+            {sidebarCollapsed ? <IconChevronRight /> : <IconChevronLeft />}
           </button>
         </div>
         <nav className="sidebar-nav" id="sidebar-nav" aria-label="Page sections">
           {!sidebarCollapsed && authenticated && (
             <div className="sidebar-primary">
-              <div className="sidebar-group-title">Primary</div>
               <NavLink
                 className={() =>
                   `primary-destination ${
@@ -711,9 +786,10 @@ export default function App() {
                   }`
                 }
                 to={primaryDestination.path}
+                title={primaryDestination.description}
               >
+                <SectionIcon sectionId="operations-health" size={16} />
                 <span className="primary-destination-label">{primaryDestination.label}</span>
-                <span className="primary-destination-copy">{primaryDestination.description}</span>
               </NavLink>
             </div>
           )}
@@ -729,8 +805,12 @@ export default function App() {
                   to={section.path}
                   title={section.label}
                 >
-                  <span className="nav-icon nav-icon-text" aria-hidden="true">
-                    {section.shortLabel}
+                  <span
+                    className="nav-icon"
+                    data-icon={sectionIconName(section.id)}
+                    aria-hidden="true"
+                  >
+                    <SectionIcon sectionId={section.id} />
                   </span>
                   <span className="nav-label">{section.label}</span>
                 </NavLink>
@@ -748,9 +828,14 @@ export default function App() {
                 >
                   <span className="sidebar-group-heading">
                     <span>{group.label}</span>
-                    <span className="sidebar-group-copy">{group.description}</span>
                   </span>
-                  <span aria-hidden="true">{collapsedGroups.includes(group.id) ? '▸' : '▾'}</span>
+                  <span aria-hidden="true" className="sidebar-group-chevron">
+                    <IconChevronDown
+                      style={{
+                        transform: collapsedGroups.includes(group.id) ? 'rotate(-90deg)' : 'none',
+                      }}
+                    />
+                  </span>
                 </button>
               )}
               {(sidebarCollapsed || !collapsedGroups.includes(group.id)) &&
@@ -764,8 +849,12 @@ export default function App() {
                       title={section.label}
                       aria-current={currentSection.id === section.id ? 'page' : undefined}
                     >
-                      <span className="nav-icon nav-icon-text" aria-hidden="true">
-                        {section.shortLabel}
+                      <span
+                        className="nav-icon"
+                        data-icon={sectionIconName(section.id)}
+                        aria-hidden="true"
+                      >
+                        <SectionIcon sectionId={section.id} />
                       </span>
                       {!sidebarCollapsed && <span className="nav-label">{section.label}</span>}
                     </NavLink>
@@ -781,7 +870,7 @@ export default function App() {
                         }
                         title={pinnedSections.includes(section.id) ? 'Unpin' : 'Pin'}
                       >
-                        ★
+                        <IconStar size={13} filled={pinnedSections.includes(section.id)} />
                       </button>
                     )}
                   </div>
@@ -803,7 +892,15 @@ export default function App() {
                 opacity: 0.7,
               }}
             >
-              {showRecent ? '▾' : '▸'} Recent
+              <IconChevronDown
+                size={12}
+                style={{
+                  transform: showRecent ? 'none' : 'rotate(-90deg)',
+                  verticalAlign: -1,
+                  marginRight: 4,
+                }}
+              />
+              Recent
             </button>
             {showRecent && (
               <ul style={{ listStyle: 'none', margin: 0, padding: '0 8px', fontSize: 12 }}>
@@ -834,7 +931,7 @@ export default function App() {
             title={dark ? 'Light mode' : 'Dark mode'}
             aria-label={dark ? 'Switch to light mode' : 'Switch to dark mode'}
           >
-            {dark ? '☀' : '🌙'}
+            {dark ? <IconSun /> : <IconMoon />}
           </button>
           {authenticated && (
             <button
@@ -843,16 +940,17 @@ export default function App() {
               title="Disconnect"
               aria-label="Disconnect"
             >
-              ⎋
+              <IconLogOut />
             </button>
           )}
           <button
             className="shortcut-hint"
             type="button"
             title="Press ? for keyboard shortcuts"
+            aria-label="Keyboard shortcuts"
             onClick={() => setShowShortcuts(true)}
           >
-            ⌘?
+            <IconKeyboard size={15} />
           </button>
         </div>
       </aside>
@@ -870,11 +968,11 @@ export default function App() {
               aria-expanded={!sidebarCollapsed}
               aria-controls="sidebar-nav"
             >
+              <IconMenu size={15} />
               {sidebarCollapsed ? 'Show Menu' : 'Hide Menu'}
             </button>
             <div className="topbar-title-group">
               <h1 className="topbar-title">{currentSection.label}</h1>
-              <Breadcrumbs sections={SECTIONS} location={location} />
             </div>
           </div>
           <div className={`topbar-right ${showTopbarActions ? 'topbar-menu-open' : ''}`}>
@@ -886,6 +984,7 @@ export default function App() {
             {authenticated && (
               <div style={{ position: 'relative' }}>
                 <button
+                  ref={inboxTriggerRef}
                   className="btn btn-sm"
                   type="button"
                   onClick={() =>
@@ -895,12 +994,18 @@ export default function App() {
                   }
                   aria-expanded={showInbox}
                   aria-haspopup="dialog"
+                  aria-label={`Inbox${inboxPending > 0 ? `, ${inboxPending} pending` : ''}`}
+                  title="Operator inbox"
                 >
-                  Inbox{inboxPending > 0 ? ` (${inboxPending})` : ''}
+                  <IconInbox size={15} />
+                  {inboxPending > 0 && <span className="badge badge-warn">{inboxPending}</span>}
                 </button>
                 {showInbox && (
                   <div
+                    ref={inboxPopoverRef}
                     className="card"
+                    role="dialog"
+                    aria-label="Operator Inbox"
                     style={{
                       position: 'absolute',
                       right: 0,
@@ -1005,82 +1110,109 @@ export default function App() {
                 )}
               </div>
             )}
-            {authenticated && (
-              <div className="topbar-secondary-actions">
-                <button
-                  className="btn btn-sm topbar-search-trigger"
-                  onClick={() => setSearchOpen(true)}
-                  title="Global search (⌘K)"
-                  aria-label="Open global search (⌘K)"
-                >
-                  <span aria-hidden="true">⌘K</span>
-                  Search
-                </button>
-                {currentSection.path !== '/help' && (
-                  <button
-                    className="btn btn-sm"
-                    onClick={() =>
-                      navigate(buildContextualHelpHref(currentSection.id, location.search))
-                    }
-                    title="Open contextual help for this workspace"
-                    type="button"
-                  >
-                    Help For View
-                  </button>
-                )}
-                <button
-                  className="btn btn-sm"
-                  onClick={copyShareLink}
-                  title="Copy shareable deep-link to clipboard"
-                >
-                  {linkCopied ? 'Copied' : 'Share Link'}
-                </button>
-                <button
-                  className={`btn btn-sm ${pinnedSections.includes(currentSection.id) ? 'btn-primary' : ''}`}
-                  type="button"
-                  onClick={() => togglePinnedSection(currentSection.id)}
-                  aria-label={
-                    pinnedSections.includes(currentSection.id)
-                      ? `Unpin ${currentSection.label}`
-                      : `Pin ${currentSection.label}`
-                  }
-                >
-                  {pinnedSections.includes(currentSection.id) ? 'Pinned' : 'Pin View'}
-                </button>
-              </div>
+            {authenticated && !isCompactTopbar && (
+              <button
+                className="btn btn-sm topbar-search-trigger"
+                onClick={() => setSearchOpen(true)}
+                title="Global search (Ctrl/Cmd K)"
+                aria-label="Open global search (Ctrl/Cmd K)"
+              >
+                <IconSearch size={14} />
+                Search
+                <kbd aria-hidden="true">⌘K</kbd>
+              </button>
             )}
-            {authenticated && (
-              <div className="mobile-topbar-actions">
+            {authenticated && !isCompactTopbar && (
+              <button
+                className={`btn btn-sm btn-icon-labelled ${pinnedSections.includes(currentSection.id) ? 'btn-primary' : 'btn-ghost'}`}
+                type="button"
+                onClick={() => togglePinnedSection(currentSection.id)}
+                aria-label={
+                  pinnedSections.includes(currentSection.id)
+                    ? `Unpin ${currentSection.label}`
+                    : `Pin ${currentSection.label}`
+                }
+                title={
+                  pinnedSections.includes(currentSection.id) ? 'Unpin this view' : 'Pin this view'
+                }
+              >
+                <IconStar size={14} filled={pinnedSections.includes(currentSection.id)} />
+                <span className="topbar-action-label">
+                  {pinnedSections.includes(currentSection.id) ? 'Pinned' : 'Pin View'}
+                </span>
+              </button>
+            )}
+            {authenticated && isWideTopbar && currentSection.path !== '/help' && (
+              <button
+                className="btn btn-sm btn-icon-labelled"
+                type="button"
+                onClick={() =>
+                  navigate(buildContextualHelpHref(currentSection.id, location.search))
+                }
+                title="Open contextual help for this workspace"
+              >
+                <IconHelp size={14} />
+                <span className="topbar-action-label">Help For View</span>
+              </button>
+            )}
+            {authenticated && isWideTopbar && (
+              <button
+                className="btn btn-sm btn-icon-labelled"
+                type="button"
+                onClick={copyShareLink}
+                title="Copy shareable deep-link to clipboard"
+              >
+                <IconLink size={14} />
+                <span className="topbar-action-label">{linkCopied ? 'Copied' : 'Share Link'}</span>
+              </button>
+            )}
+            {authenticated && !isWideTopbar && (
+              <div className="topbar-overflow">
                 <button
-                  className="btn btn-sm"
+                  ref={topbarActionsTriggerRef}
+                  className="btn btn-sm btn-icon-labelled"
                   type="button"
-                  onClick={() =>
-                    setShowTopbarActionsLocationKey((current) =>
-                      current === location.key ? null : location.key,
-                    )
-                  }
+                  onClick={() => setShowTopbarActions((current) => !current)}
                   aria-expanded={showTopbarActions}
                   aria-haspopup="menu"
+                  title="More actions"
                 >
-                  More
+                  <IconMore size={15} />
+                  <span>More</span>
                 </button>
                 {showTopbarActions && (
                   <div
+                    ref={topbarActionsMenuRef}
                     className="card mobile-topbar-actions-menu"
                     role="menu"
                     aria-label="More actions"
+                    onKeyDown={(event) => {
+                      if (event.key !== 'ArrowDown' && event.key !== 'ArrowUp') return;
+                      event.preventDefault();
+                      const items = Array.from(
+                        topbarActionsMenuRef.current?.querySelectorAll('[role="menuitem"]') || [],
+                      );
+                      if (items.length === 0) return;
+                      const currentIndex = items.indexOf(document.activeElement);
+                      const delta = event.key === 'ArrowDown' ? 1 : -1;
+                      const nextIndex = (currentIndex + delta + items.length) % items.length;
+                      items[nextIndex]?.focus();
+                    }}
                   >
-                    <button
-                      className="btn btn-sm"
-                      type="button"
-                      role="menuitem"
-                      onClick={() => {
-                        setSearchOpen(true);
-                        setShowTopbarActionsLocationKey(null);
-                      }}
-                    >
-                      Search
-                    </button>
+                    {isCompactTopbar && (
+                      <button
+                        className="btn btn-sm"
+                        type="button"
+                        role="menuitem"
+                        onClick={() => {
+                          setSearchOpen(true);
+                          setShowTopbarActions(false);
+                        }}
+                      >
+                        <IconSearch size={14} />
+                        Search
+                      </button>
+                    )}
                     {currentSection.path !== '/help' && (
                       <button
                         className="btn btn-sm"
@@ -1088,9 +1220,10 @@ export default function App() {
                         role="menuitem"
                         onClick={() => {
                           navigate(buildContextualHelpHref(currentSection.id, location.search));
-                          setShowTopbarActionsLocationKey(null);
+                          setShowTopbarActions(false);
                         }}
                       >
+                        <IconHelp size={14} />
                         Help For View
                       </button>
                     )}
@@ -1100,22 +1233,26 @@ export default function App() {
                       role="menuitem"
                       onClick={() => {
                         copyShareLink();
-                        setShowTopbarActionsLocationKey(null);
+                        setShowTopbarActions(false);
                       }}
                     >
+                      <IconLink size={14} />
                       {linkCopied ? 'Copied' : 'Share Link'}
                     </button>
-                    <button
-                      className={`btn btn-sm ${pinnedSections.includes(currentSection.id) ? 'btn-primary' : ''}`}
-                      type="button"
-                      role="menuitem"
-                      onClick={() => {
-                        togglePinnedSection(currentSection.id);
-                        setShowTopbarActionsLocationKey(null);
-                      }}
-                    >
-                      {pinnedSections.includes(currentSection.id) ? 'Pinned' : 'Pin View'}
-                    </button>
+                    {isCompactTopbar && (
+                      <button
+                        className="btn btn-sm"
+                        type="button"
+                        role="menuitem"
+                        onClick={() => {
+                          togglePinnedSection(currentSection.id);
+                          setShowTopbarActions(false);
+                        }}
+                      >
+                        <IconStar size={14} filled={pinnedSections.includes(currentSection.id)} />
+                        {pinnedSections.includes(currentSection.id) ? 'Pinned' : 'Pin View'}
+                      </button>
+                    )}
                   </div>
                 )}
               </div>
@@ -1587,8 +1724,12 @@ export default function App() {
                 }}
               >
                 <h3 style={{ margin: 0 }}>Keyboard Shortcuts</h3>
-                <button className="btn btn-sm" onClick={() => setShowShortcuts(false)}>
-                  ✕
+                <button
+                  className="btn btn-sm btn-icon"
+                  onClick={() => setShowShortcuts(false)}
+                  aria-label="Close keyboard shortcuts"
+                >
+                  <IconClose size={14} />
                 </button>
               </div>
               {[

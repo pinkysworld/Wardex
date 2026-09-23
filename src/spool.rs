@@ -37,7 +37,7 @@ fn spool_cipher_core(data: &[u8], key: &[u8], nonce: &[u8; 16]) -> Vec<u8> {
 
 /// Encrypt: generate a random nonce, prepend it, then XOR with keystream.
 fn spool_encrypt(data: &[u8], key: &[u8]) -> Vec<u8> {
-    use rand::Rng;
+    use rand::RngExt;
     let mut nonce = [0u8; 16];
     rand::rng().fill(&mut nonce);
     let mut result = nonce.to_vec();

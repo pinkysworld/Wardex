@@ -1405,6 +1405,43 @@ impl EnterpriseStore {
         summary: String,
         synced_by: String,
     ) -> TicketSyncRecord {
+        self.sync_ticket_remote(
+            provider,
+            object_kind,
+            object_id,
+            queue_or_project,
+            summary,
+            synced_by,
+            Ok(None),
+        )
+    }
+
+    /// Same idempotent create-or-update dedupe as `sync_ticket`, but backed
+    /// by a real remote ticketing client's result when one is configured.
+    ///
+    /// `remote` distinguishes three cases the caller must not conflate:
+    /// - `Ok(None)`: no Jira/ServiceNow client is enabled — local bookkeeping
+    ///   only, matching prior behaviour exactly (a locally-fabricated key is
+    ///   used since there is no remote ticket to reference).
+    /// - `Ok(Some(ticket))`: the remote call succeeded; its
+    ///   `external_key`/`url`/`status` become the source of truth.
+    /// - `Err(error)`: a provider *is* configured but the remote call
+    ///   failed. This must NOT be treated like "no provider" — doing so
+    ///   would fabricate a synthetic external key that no remote ticket
+    ///   backs, and every retry would then PATCH/comment a nonexistent
+    ///   remote id forever. Instead the record is marked `status: "failed"`
+    ///   with `last_error` set and no external key, so a retry creates the
+    ///   ticket for real.
+    pub fn sync_ticket_remote(
+        &mut self,
+        provider: String,
+        object_kind: String,
+        object_id: String,
+        queue_or_project: Option<String>,
+        summary: String,
+        synced_by: String,
+        remote: Result<Option<crate::ticketing::RemoteTicket>, String>,
+    ) -> TicketSyncRecord {
         if let Some(index) = self.snapshot.ticket_syncs.iter().position(|sync| {
             sync.provider == provider
                 && sync.object_kind == object_kind
@@ -1415,34 +1452,98 @@ impl EnterpriseStore {
                 existing.sync_count += 1;
                 existing.synced_at = now_rfc3339();
                 existing.summary = summary;
-                existing.status = "updated".to_string();
+                match &remote {
+                    Ok(Some(remote)) => {
+                        existing.status = "updated".to_string();
+                        // A prior sync of this same object may have failed
+                        // and left no external key (see the `Err` arm
+                        // below); this retry's remote call just created the
+                        // real ticket, so its key becomes authoritative
+                        // here too, not just on first-ever creation.
+                        existing.external_key.clone_from(&remote.external_key);
+                        existing.external_url = remote.url.clone();
+                        existing.remote_status = Some(remote.status.clone());
+                        existing.last_pulled_at = Some(now_rfc3339());
+                        existing.last_error = None;
+                    }
+                    Ok(None) => {
+                        existing.status = "updated".to_string();
+                    }
+                    Err(error) => {
+                        existing.status = "failed".to_string();
+                        existing.last_error = Some(error.clone());
+                    }
+                }
                 existing.clone()
             };
             self.persist();
             return updated;
         }
-        let external_key = format!(
-            "{}-{}-{}",
-            provider.to_ascii_uppercase(),
-            object_kind.to_ascii_uppercase(),
-            object_id
-        );
+        let (status, external_key, external_url, remote_status, last_error) = match &remote {
+            Ok(Some(remote)) => (
+                "created".to_string(),
+                remote.external_key.clone(),
+                remote.url.clone(),
+                Some(remote.status.clone()),
+                None,
+            ),
+            Ok(None) => (
+                "created".to_string(),
+                format!(
+                    "{}-{}-{}",
+                    provider.to_ascii_uppercase(),
+                    object_kind.to_ascii_uppercase(),
+                    object_id
+                ),
+                None,
+                None,
+                None,
+            ),
+            Err(error) => (
+                "failed".to_string(),
+                String::new(),
+                None,
+                None,
+                Some(error.clone()),
+            ),
+        };
         let record = TicketSyncRecord {
             id: self.next_id("ticket"),
             provider,
             object_kind,
             object_id,
-            status: "created".to_string(),
+            status,
             external_key,
             queue_or_project,
             summary,
             synced_by,
             synced_at: now_rfc3339(),
             sync_count: 1,
+            external_url,
+            remote_status,
+            last_pulled_at: None,
+            last_error,
         };
         self.snapshot.ticket_syncs.push(record.clone());
         self.persist();
         record
+    }
+
+    /// Refresh a ticket sync record's remote status (the pull side of
+    /// bidirectional sync), by local sync id.
+    pub fn update_ticket_sync_status(&mut self, sync_id: &str, remote_status: &str) -> bool {
+        let Some(record) = self
+            .snapshot
+            .ticket_syncs
+            .iter_mut()
+            .find(|sync| sync.id == sync_id)
+        else {
+            return false;
+        };
+        record.remote_status = Some(remote_status.to_string());
+        record.last_pulled_at = Some(now_rfc3339());
+        self.persist();
+        true
     }
 
     pub fn create_or_update_idp_provider(

@@ -518,7 +518,7 @@ fn normalize_loaded_token(mut token: EnrollmentToken) -> EnrollmentToken {
 }
 
 fn generate_agent_id() -> String {
-    use rand::Rng;
+    use rand::RngExt;
     let mut rng = rand::rng();
     let bytes: Vec<u8> = (0..8).map(|_| rng.random()).collect();
     format!("agent-{}", hex::encode(bytes))

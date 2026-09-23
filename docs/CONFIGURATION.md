@@ -22,7 +22,7 @@ This document covers all configuration options for the Wardex XDR agent and serv
 | `WARDEX_TLS_KEY` | — | Path to TLS private key (PEM) |
 | `WARDEX_DB_PATH` | `var/wardex.db` | SQLite database path |
 | `RUST_LOG` | `info` | Log level filter (`debug`, `info`, `warn`, `error`) |
-| `OTEL_EXPORTER_OTLP_ENDPOINT` | — | OpenTelemetry collector endpoint |
+| `OTEL_EXPORTER_OTLP_ENDPOINT` | — | OpenTelemetry collector base URL (e.g. `http://otel-collector:4318`); used as the default when no endpoint has been saved via `POST /api/telemetry/otlp` |
 
 ### Production fail-closed baseline
 
@@ -43,11 +43,15 @@ The server reads `wardex.toml` from the working directory at startup (or from `-
 
 ### `[server]`
 
+Bind address and port are set via the `WARDEX_HOST` / `WARDEX_PORT` environment variables (see above), not in
+`wardex.toml`.
+
 ```toml
 [server]
-port = 8080
-host = "127.0.0.1"
+rate_limit_read_per_minute = 360   # Max GET/read requests per minute per client IP (0 = unlimited)
+rate_limit_write_per_minute = 60   # Max mutating requests per minute per client IP (0 = unlimited)
 shutdown_timeout_secs = 30
+openapi_public = true              # Whether /api/openapi.json stays public; must be set explicitly in production
 # metrics_bearer_token = "s3cret"  # When set, /api/metrics requires this bearer token.
 #                                  # Leave unset (default) to keep the endpoint public for Prometheus scrapers
 #                                  # that run on a trusted network.
@@ -58,11 +62,10 @@ shutdown_timeout_secs = 30
 ```toml
 [security]
 token_ttl_secs = 86400        # Token lifetime (0 = no expiry)
-rate_limit_per_min = 120       # API rate limit per client IP
-brute_force_lockout = 5        # Lock IP after N failed auth attempts
 require_mtls_agents = false    # When true, require verified agent mTLS identity
 agent_ca_cert_path = ""        # Optional CA bundle used by the TLS terminator or listener
 trusted_mtls_proxy_addrs = []  # Required in production when trusting mTLS identity headers
+cors_allowed_origins = []      # Allowed admin-console CORS origins (empty = same-origin only)
 
 [security.update_signing]
 require_signed_updates = true  # reject unsigned agent update releases
@@ -79,6 +82,20 @@ payload hash, replay counter, downgrade policy, and binary size before install. 
 `require_signed_updates = true`; unsigned update grace is now an explicit lab compatibility override instead of the
 default.
 
+### `[monitor]`
+
+```toml
+[monitor]
+interval_secs = 5              # Legacy sampling cadence, still used as the collection interval fallback
+alert_threshold = 3.5
+alert_log = "var/alerts.jsonl"
+dry_run = false
+duration_secs = 0              # 0 = run indefinitely
+syslog = false
+cef = false
+watch_paths = []
+```
+
 ### `[collection]`
 
 ```toml
@@ -87,15 +104,26 @@ collection_interval_secs = 10  # How often to collect local telemetry
 max_events_per_batch = 500     # Event batch size for SIEM forwarding
 ```
 
+`collection.collection_interval_secs` drives the agent's sampling loop. For backward compatibility with configs
+written before `[collection]` existed, the agent only uses `collection_interval_secs` when it is explicitly set in
+`wardex.toml`; otherwise it falls back to `monitor.interval_secs` (default `5`), so a config that sets only
+`[monitor] interval_secs` keeps its cadence unchanged. If both are set and differ, `collection_interval_secs` wins
+and the agent logs a one-time deprecation note.
+
 ### `[siem]`
 
 ```toml
 [siem]
 enabled = false
-url = ""
-token = ""
-format = "json"      # "json", "cef", or "leef"
-batch_size = 100
+siem_type = "generic"    # "splunk", "elastic", "sentinel", "qradar", or "generic"
+endpoint = ""            # SIEM endpoint URL (e.g. HEC endpoint for Splunk)
+auth_token = ""
+index = "wardex"
+source_type = "wardex:xdr"
+poll_interval_secs = 60
+pull_enabled = false
+batch_size = 50
+verify_tls = true
 ```
 
 ### `[taxii]`
@@ -103,8 +131,9 @@ batch_size = 100
 ```toml
 [taxii]
 enabled = false
-url = ""
-collection = "default"
+url = ""              # TAXII collection URL (e.g. https://taxii.example.com/api/collections/abc/objects/)
+auth_token = ""
+added_after = ""       # Optional RFC 3339 timestamp; only pull indicators newer than this
 poll_interval_secs = 300
 ```
 
@@ -149,6 +178,147 @@ matching-platform true execution for restore-file, kill-process, restart-service
 disable-account, and flush-dns adapters. Recommended operator posture is to keep
 `execute_live_rollback_commands = false` outside controlled maintenance windows and only enable it after verifying
 the typed-hostname confirmation flow plus the platform-specific command set on the target host.
+
+### `[collectors]`
+
+Selects which platform collector backends are preferred, and the scan cadence for
+each Windows telemetry source. `*_enabled = false` force-disables a backend even
+when it is available; `*_enabled = true` (the default) prefers it but never
+fabricates support — when the backend isn't compiled into this build or isn't
+available on the running host, Wardex logs `"<name>_enabled=true but ... is not
+available"` and falls back to the non-accelerated collection path instead of
+silently doing nothing.
+
+```toml
+[collectors]
+ebpf_enabled = true             # Linux eBPF tracing backend; not compiled into
+                                 # this build yet, so enabling it only logs a
+                                 # notice — kernel-event collection is tracked
+                                 # separately (see kernel_events.rs).
+ebpf_programs = ["execsnoop", "tcpconnect", "filelife"]
+etw_enabled = true              # Windows Event Tracing for Windows
+wmi_enabled = true              # Windows WMI/PowerShell collector paths
+amsi_enabled = true             # Windows AMSI script-content inspection
+registry_scan_interval_secs = 300
+process_scan_interval_secs = 30
+network_scan_interval_secs = 15
+```
+
+### `[container]`
+
+Live Docker/Podman and in-cluster Kubernetes event sources (see
+`src/container_runtime.rs`). Reachability is surfaced via `wardex doctor` and
+`GET /api/platform`.
+
+```toml
+[container]
+docker_enabled = false
+docker_socket_path = "/var/run/docker.sock"  # or a Podman socket, e.g.
+                                              # "/run/user/1000/podman/podman.sock"
+docker_timeout_secs = 10
+docker_backoff_secs = 1
+docker_max_backoff_secs = 60
+kubernetes_enabled = false
+kubernetes_namespaces = []       # empty = all namespaces
+```
+
+Kubernetes support is best-effort: the in-cluster API server presents a TLS
+certificate signed by the cluster's own CA, and this build's HTTP client does
+not currently trust a custom root CA, so live Pod watching against a real
+cluster will fail TLS verification. The watch-stream parsing and detection
+mapping are implemented and unit-tested against fixtures so the feature can be
+enabled as soon as a custom trust anchor is wired through.
+
+### `[relay]`
+
+```toml
+[relay]
+enabled = true
+upstream = "https://central.example.com"
+sync_interval_secs = 300
+spool_max_bytes = 104857600  # 100 MB
+```
+
+### `[attestation]`
+
+```toml
+[attestation]
+enabled = true
+manifest_path = "/etc/wardex/manifest.json"
+require_at_boot = true
+periodic_check_minutes = 30
+trust_store_path = "/etc/wardex/trust_store.json"
+```
+
+`trust_store_path` points at the local JSON trust store of accepted release
+signer public keys (`attestation::TrustStore`). Verify a manifest against it
+with `wardex attest-verify [manifest] [trust-store]`, which falls back to the
+paths configured here when not given explicitly.
+## Threat-Intel Enrichment, Ticketing, and OTLP Export
+
+These integrations are configured at runtime through the admin API (not `wardex.toml`); every field takes a
+literal value or a secret reference resolved through the same `SecretsResolver` the cloud collectors use
+(`${ENV_VAR}`, `file:///path`, or `vault://mount/path#key`).
+
+| Integration | Config endpoint | Action endpoint(s) | Notes |
+|---|---|---|---|
+| VirusTotal / AbuseIPDB enrichment | `GET`/`POST /api/integrations/enrichment` | `POST /api/enrich/lookup` (`{"kind": "ip_address\|file_hash\|domain\|url", "indicator": "..."}`) | VT public-API default is 4 req/min; AbuseIPDB defaults to 60 req/min. Results are cached with a per-provider TTL (default 1h). Both degrade to a typed error (never a panic) when disabled, misconfigured, or rate-limited. `indicator` values (which can come from attacker-influenced telemetry) are validated per `kind` before being placed in the request path — a hash must be 32/40/64 hex characters, an IP must parse, a domain must match a hostname grammar — and percent-encoded, so `/`, `?`, `#`, or `..` in an indicator can't redirect the request to an unintended VirusTotal API path. |
+| Jira ticketing | `GET`/`POST /api/integrations/ticketing/jira` | `POST /api/tickets/sync`, `POST /api/tickets/pull` | Cloud (`email` + `api_token`) or Server (leave `email` empty, `api_token` used as a bearer PAT). Re-syncing an already-synced case adds a comment instead of creating a duplicate issue. |
+| ServiceNow ticketing | `GET`/`POST /api/integrations/ticketing/servicenow` | `POST /api/tickets/sync`, `POST /api/tickets/pull` | Table API against `table` (default `incident`); basic auth (`username`/`password`) or `oauth_token`. Re-syncing patches the existing incident by `sys_id` instead of creating a new one. |
+| OTLP/HTTP export | `GET`/`POST /api/telemetry/otlp` | `POST /api/telemetry/otlp/flush` | Exports batched OTLP/HTTP JSON to `{endpoint}/v1/traces`, `/v1/logs`, `/v1/metrics` with retry/backoff and a bounded, drop-counted queue. `OTEL_EXPORTER_OTLP_ENDPOINT` seeds the default endpoint. |
+
+`POST /api/tickets/sync` is idempotent: syncing the same `(provider, object_kind, object_id)` again updates the
+existing local record and the existing remote ticket (add-comment / patch) rather than creating a second one.
+When no ticketing provider is enabled, it keeps the prior local-only bookkeeping behavior unchanged. When a
+provider **is** enabled but the remote call fails, the sync record is stored with `status: "failed"` and
+`last_error` set, and **no** external key is fabricated — a retry then creates the ticket for real, instead of
+patching/commenting a synthetic id (`JIRA-INCIDENT-123`-style) that was never actually created remotely.
+
+Outbound URLs configured here (Jira `base_url`, ServiceNow `instance_url`, the OTLP `endpoint`, and the
+VirusTotal/AbuseIPDB `base_url`s) are validated before being saved: only `http://`/`https://` is accepted,
+plaintext `http://` is rejected unless the host is loopback/localhost (so tests can point at a local mock
+server), and link-local (`169.254.0.0/16`, `fe80::/10`) and cloud-metadata hosts
+(`169.254.169.254`, `metadata.google.internal`, `fd00:ec2::254`) are always rejected. If a configured URL's
+*host* changes and the same request doesn't also supply a fresh credential, the previously stored
+credential/token/headers for that integration are cleared rather than carried over to the new host.
+
+`GET`/`POST /api/telemetry/otlp` never returns OTLP header *values* (they are typically bearer/API-key auth
+headers) — only header names plus a `has_headers` flag. To keep a header unchanged, echo back its name with
+the value `"__REDACTED__"`; any other value replaces the stored one.
+
+The heavier handlers here (`POST /api/ml/train`, `/api/enrich/lookup`, `/api/tickets/pull`,
+`/api/telemetry/otlp/flush`, and `/api/tickets/sync`) release the global server lock before doing the
+slow/network work (model training, outbound HTTP calls) and only re-acquire it briefly to read the inputs and
+write back the result, so a slow ticketing/enrichment/OTLP endpoint or a Random Forest retrain no longer stalls
+every other request. Configurable HTTP timeouts for these clients are clamped to 1-60 seconds.
+
+### SMTP email notifications
+
+`notifications::SmtpConfig` now supports `use_tls` (STARTTLS on a plaintext port, typically 587), `implicit_tls`
+(TLS from the first byte, typically port 465), `username`/`password` (AUTH PLAIN/LOGIN, negotiated from the
+server's advertised `AUTH` capability), and an optional `ca_cert_pem` to trust an internal/private CA in addition
+to the built-in Mozilla root store. Certificate verification is always on. Requesting TLS in a binary built
+without the `tls` cargo feature fails delivery with a clear error instead of silently sending in plaintext.
+
+AUTH credentials are refused over a plaintext connection: `smtp_send` only sends `AUTH PLAIN`/`AUTH LOGIN` once
+the connection is on TLS (STARTTLS or implicit), unless `allow_plaintext_auth` is explicitly set **and** `host`
+is a loopback address (for a trusted local test/relay setup) — the default is to fail closed with a clear error
+rather than sending credentials in the clear. `from`/`to` addresses are validated at send time and reject CR,
+LF, `<`, and `>`, which otherwise could be used to inject extra SMTP commands or message headers.
+
+### Okta identity collector
+
+The Okta System Log collector (`collector_identity::OktaCollector`) has a `poll()` method that performs the
+HTTP fetch itself (matching the AWS/Azure/GCP collector shape) and reads Okta's
+`X-Rate-Limit-Remaining`/`X-Rate-Limit-Reset` headers to report a `retry_after_secs` hint instead of hammering
+the API when the org-wide rate limit is close to empty. Its `after` pagination cursor (parsed from the `Link`
+response header's `rel="next"` entry, and percent-encoded when rebuilt into the next request URL) is persisted
+via the same collector-checkpoint storage the other collectors use, but **only** by the background poll loop,
+and only after the polled events have actually been ingested into the event store — a crash between poll and
+ingest re-fetches the same page rather than silently skipping it. The `POST /api/collectors/okta/validate`
+config-test endpoint polls to show a sample of events but never advances the persisted cursor, since it never
+ingests anything; earlier behavior persisted the cursor from validation too, which meant every "Validate" click
+in the admin console silently skipped a page of real identity events.
 
 ## API Versioning
 

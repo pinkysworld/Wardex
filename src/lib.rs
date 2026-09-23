@@ -42,6 +42,7 @@ pub mod sigma;
 pub mod sigma_library;
 pub mod ueba;
 pub mod yara_engine;
+pub mod yara_parser;
 
 // ── Collection & Ingestion ───────────────────────────────────────────────────
 pub mod collector;
@@ -53,6 +54,15 @@ pub mod collector_linux;
 pub mod collector_macos;
 pub mod collector_windows;
 pub mod event_forward;
+#[cfg(target_os = "linux")]
+pub mod kernel_linux;
+// Unconditional on every target (unlike `kernel_linux`, which is Linux-only
+// end to end): only the real ETW/Endpoint-Security consumers inside these
+// modules are `#[cfg(windows)]` / `#[cfg(target_os = "macos")]`-gated, so
+// their pure event-mapping and capability-decision logic gets unit-tested
+// on every CI host, including Linux. See each module's doc comment.
+pub mod kernel_macos;
+pub mod kernel_windows;
 pub mod log_collector;
 pub mod ocsf;
 pub mod spool;
@@ -78,6 +88,7 @@ pub mod audit;
 pub mod compliance;
 pub mod compliance_hipaa;
 pub mod compliance_templates;
+pub mod federated;
 pub mod privacy;
 pub mod proof;
 pub mod report;
@@ -114,6 +125,7 @@ pub mod malware_signatures;
 pub mod mitre_coverage;
 pub mod sbom;
 pub mod threat_intel;
+pub mod threat_intel_enrich;
 pub mod vulnerability;
 
 // ── Networking & Cloud ───────────────────────────────────────────────────────
@@ -121,6 +133,7 @@ pub mod cert_monitor;
 pub mod cloud_inventory;
 pub mod container;
 pub mod container_image;
+pub mod container_runtime;
 pub mod digital_twin;
 pub mod ndr;
 pub mod quantum;
@@ -137,6 +150,7 @@ pub mod monitor;
 pub mod siem;
 pub mod structured_log;
 pub mod telemetry;
+pub mod ticketing;
 
 // ── Business Logic ───────────────────────────────────────────────────────────
 pub mod billing;
@@ -158,6 +172,7 @@ pub mod harness;
 pub mod kernel_events;
 pub mod ransomware;
 pub mod wasm_engine;
+pub mod wasm_runtime;
 
 // ── Infrastructure ───────────────────────────────────────────────────────────
 pub mod attestation;
@@ -170,6 +185,7 @@ pub mod server_cluster;
 pub mod server_collectors;
 pub mod server_control_plane;
 pub mod server_evidence;
+pub mod server_federated;
 pub mod server_feeds;
 pub mod server_fleet;
 pub mod server_metrics;

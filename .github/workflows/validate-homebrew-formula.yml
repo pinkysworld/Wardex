@@ -45,7 +45,10 @@ jobs:
           - macos-15-intel
     env:
       HOMEBREW_NO_AUTO_UPDATE: "1"
-      HOMEBREW_NO_INSTALL_FROM_API: "1"
+      # Linux runner images no longer ship a homebrew/core tap, and cloning it
+      # from inside `brew install` fails there; resolve core formulae through
+      # the JSON API on Linux instead. macOS keeps the tap-based resolution.
+      HOMEBREW_NO_INSTALL_FROM_API: ${{ startsWith(matrix.os, 'macos') && '1' || '' }}
 
     steps:
       - name: Checkout

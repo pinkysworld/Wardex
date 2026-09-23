@@ -13,6 +13,8 @@ use axum::http::{HeaderMap, HeaderValue, Method as HttpMethod, StatusCode};
 use axum::response::Response;
 use serde::de::DeserializeOwned;
 
+use crate::ticketing::RemoteTicket;
+
 /// Local Method enum preserving tiny_http variant names for match compatibility.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum Method {
@@ -182,6 +184,9 @@ pub(crate) use server_core_helpers::*;
 #[path = "server_dynamic_routes.rs"]
 mod server_dynamic_routes;
 use server_dynamic_routes::handle_dynamic_api_route;
+#[path = "server_integrations_ext.rs"]
+mod server_integrations_ext;
+pub(crate) use server_integrations_ext::*;
 #[path = "server_views.rs"]
 mod server_views;
 use crate::server_response::{
@@ -200,6 +205,10 @@ use sha2::Digest;
 pub use crate::server_routing::{ApiRouteAccess, classify_api_route_access};
 
 const FAILED_AUTH_TRACKER_STORAGE_KEY: &str = "server.failed_auth_tracker";
+pub(crate) const FEDERATION_STATE_STORAGE_KEY: &str = "server.federation_state";
+/// Parameter dimension of the built-in [`crate::federated::LogisticRegressionModel`]
+/// federation model: 7 [`crate::ml_engine::TriageFeatures`] plus one bias weight.
+pub(crate) const FEDERATION_PARAM_DIM: usize = 8;
 
 // ── Rate Limiter ────────────────────────────────────────────
 
@@ -617,6 +626,7 @@ pub(crate) struct AppState {
     key_rotation: KeyRotationManager,
     privacy: PrivacyAccountant,
     policy_vm: PolicyVm,
+    pub(crate) wasm_extensions: crate::wasm_runtime::WasmExtensionManager,
     fingerprint: Option<DeviceFingerprint>,
     monitor: Monitor,
     drift: DriftDetector,
@@ -631,6 +641,7 @@ pub(crate) struct AppState {
     // XDR fleet management
     pub(crate) agent_registry: AgentRegistry,
     pub(crate) event_store: EventStore,
+    pub(crate) search_index: Arc<crate::search::PersistentEventStore>,
     clickhouse_store: Option<crate::storage_clickhouse::ClickHouseStorage>,
     policy_store: PolicyStore,
     pub(crate) update_manager: UpdateManager,
@@ -709,7 +720,7 @@ pub(crate) struct AppState {
     workflow_store: crate::investigation::WorkflowStore,
     llm_analyst: Arc<Mutex<crate::llm_analyst::LlmAnalyst>>,
     pub(crate) model_registry: crate::ml_engine::ModelRegistry,
-    detection_feedback: crate::detection_feedback::DetectionFeedbackStore,
+    pub(crate) detection_feedback: crate::detection_feedback::DetectionFeedbackStore,
     // Phase 43: malware detection
     pub(crate) malware_hash_db: crate::malware_signatures::MalwareHashDb,
     malware_scanner: crate::malware_scanner::MalwareScanner,
@@ -728,34 +739,46 @@ pub(crate) struct AppState {
     alert_broadcaster: crate::ws_stream::AlertBroadcaster,
     // Phase 46: extensible key-value store for webhooks etc.
     extra: HashMap<String, serde_json::Value>,
+    // Federated learning coordinator (R27)
+    pub(crate) federation: crate::federated::FederationCoordinator,
 }
 
+/// Map a stored event to the field set the search index understands. Shared
+/// by the ephemeral test/rebuild helper below and by the incremental
+/// ingestion hook that feeds the persistent search index.
+pub(crate) fn event_to_search_fields(
+    event: &crate::event_forward::StoredEvent,
+) -> HashMap<String, String> {
+    let mut fields = HashMap::new();
+    fields.insert("timestamp".to_string(), event.alert.timestamp.clone());
+    fields.insert("device_id".to_string(), event.alert.hostname.clone());
+    fields.insert("event_class".to_string(), "alert".to_string());
+    fields.insert("process_name".to_string(), event.alert.action.clone());
+    fields.insert("command_line".to_string(), event.alert.reasons.join("; "));
+    fields.insert("src_ip".to_string(), String::new());
+    fields.insert("dst_ip".to_string(), String::new());
+    fields.insert("user_name".to_string(), String::new());
+    fields.insert(
+        "raw_text".to_string(),
+        format!(
+            "{} {} {} {} {}",
+            event.agent_id,
+            event.alert.hostname,
+            event.alert.action,
+            event.alert.level,
+            event.alert.reasons.join(" ")
+        ),
+    );
+    fields
+}
+
+#[cfg(test)]
 fn build_search_index_from_events(
     events: &[crate::event_forward::StoredEvent],
 ) -> Result<crate::search::SearchIndex, String> {
-    let index = crate::search::SearchIndex::new("/tmp/wardex-search")?;
+    let index = crate::search::SearchIndex::in_memory()?;
     for event in events {
-        let mut fields = HashMap::new();
-        fields.insert("timestamp".to_string(), event.alert.timestamp.clone());
-        fields.insert("device_id".to_string(), event.alert.hostname.clone());
-        fields.insert("event_class".to_string(), "alert".to_string());
-        fields.insert("process_name".to_string(), event.alert.action.clone());
-        fields.insert("command_line".to_string(), event.alert.reasons.join("; "));
-        fields.insert("src_ip".to_string(), String::new());
-        fields.insert("dst_ip".to_string(), String::new());
-        fields.insert("user_name".to_string(), String::new());
-        fields.insert(
-            "raw_text".to_string(),
-            format!(
-                "{} {} {} {} {}",
-                event.agent_id,
-                event.alert.hostname,
-                event.alert.action,
-                event.alert.level,
-                event.alert.reasons.join(" ")
-            ),
-        );
-        index.index_event(fields)?;
+        index.index_event(event_to_search_fields(event))?;
     }
     let _ = index.commit()?;
     Ok(index)
@@ -875,12 +898,24 @@ fn handle_api(
         };
         let bound_agent_identity = route_path != "/api/agents/enroll"
             && agent_request_bound_to_agent(&method, &url, headers, body, state);
+        // Federation routes key replay protection, quorum and per-agent
+        // privacy budgets on the agent id. The shared agent token and mTLS
+        // do not bind a specific agent id, so a caller could mint arbitrary
+        // identities (Sybil). These routes therefore always require the
+        // per-agent enrollment credential for the claimed, registered agent,
+        // in every environment.
+        let per_agent_binding_required =
+            crate::server_routing::is_federation_agent_route(&method, route_path);
         let trust_configured = required_agent_token.is_some() || mtls_configured;
-        if trust_configured || is_production_env() {
-            let valid = required_agent_token.as_deref().is_some_and(|expected| {
-                secure_token_eq(presented_bearer_token.as_deref(), expected)
-            }) || mtls_verified
-                || bound_agent_identity;
+        if trust_configured || is_production_env() || per_agent_binding_required {
+            let valid = if per_agent_binding_required {
+                bound_agent_identity
+            } else {
+                required_agent_token.as_deref().is_some_and(|expected| {
+                    secure_token_eq(presented_bearer_token.as_deref(), expected)
+                }) || mtls_verified
+                    || bound_agent_identity
+            };
             if !valid {
                 let lockout = failed_auth_record_request(remote_addr, &failed_auth_key);
                 if !crate::server_auth::FailedAuthTracker::is_exempt(remote_addr) {
@@ -2041,6 +2076,12 @@ fn handle_api(
         // ── Platform ──────────────────────────────────────────────
         (Method::Get, "/api/platform") => {
             let caps = PlatformCapabilities::detect_current();
+            let container_status = {
+                let s = state
+                    .lock()
+                    .unwrap_or_else(std::sync::PoisonError::into_inner);
+                crate::container_runtime::probe_status(&s.config.container)
+            };
             let info = serde_json::json!({
                 "platform": format!("{:?}", caps.platform),
                 "has_tpm": caps.has_tpm,
@@ -2048,6 +2089,14 @@ fn handle_api(
                 "has_ebpf": caps.has_ebpf,
                 "has_firewall": caps.has_firewall,
                 "max_threads": caps.max_threads,
+                "container_runtime": {
+                    "docker_status": format!("{:?}", container_status.docker_status),
+                    "docker_socket_path": container_status.docker_socket_path,
+                    "docker_server_version": container_status.docker_server_version,
+                    "docker_error": container_status.docker_error,
+                    "kubernetes_status": format!("{:?}", container_status.kubernetes_status),
+                    "kubernetes_error": container_status.kubernetes_error,
+                },
             });
             json_response(&info.to_string(), 200)
         }
@@ -2102,8 +2151,21 @@ fn handle_api(
             json_response(&info.to_string(), 200)
         }
 
-        // ── Policy VM ─────────────────────────────────────────────
+        // ── Policy VM (legacy bytecode VM; see wasm_engine module docs) ──
         (Method::Post, "/api/policy-vm/execute") => handle_policy_vm_execute(body, state),
+
+        // ── WebAssembly extension runtime (wardex_v1 host ABI) ───────
+        (Method::Get, "/api/wasm-extensions") => handle_wasm_extensions_list(state),
+        (Method::Post, "/api/wasm-extensions/upload") => handle_wasm_extensions_upload(body, state),
+        (Method::Post, "/api/wasm-extensions/run") => handle_wasm_extensions_run(body, state),
+        (Method::Delete, p) if p.starts_with("/api/wasm-extensions/") => {
+            let name = p.strip_prefix("/api/wasm-extensions/").unwrap_or("");
+            if name.is_empty() {
+                error_json("extension name is required", 400)
+            } else {
+                handle_wasm_extensions_delete(name, state)
+            }
+        }
 
         // ── Fingerprint ───────────────────────────────────────────
         (Method::Get, "/api/fingerprint/status") => {
@@ -2646,12 +2708,37 @@ fn handle_api(
             if max_events > 0 {
                 trimmed_events = s.event_store.apply_retention(max_events);
             }
+            // Keep the search index in sync: apply its own day-based
+            // retention, and additionally drop anything older than the
+            // oldest event now remaining in the primary store (so a
+            // count-based trim above doesn't leave orphaned, unreachable
+            // documents searchable).
+            let mut trimmed_search_docs = 0u64;
+            match s.search_index.apply_retention() {
+                Ok(n) => trimmed_search_docs += n,
+                Err(e) => log::warn!("[SEARCH] retention apply failed: {e}"),
+            }
+            if trimmed_events > 0
+                && let Some(oldest) = s
+                    .event_store
+                    .all_events()
+                    .iter()
+                    .filter_map(|e| chrono::DateTime::parse_from_rfc3339(&e.alert.timestamp).ok())
+                    .map(|dt| dt.with_timezone(&chrono::Utc))
+                    .min()
+            {
+                match s.search_index.delete_before(oldest) {
+                    Ok(n) => trimmed_search_docs += n,
+                    Err(e) => log::warn!("[SEARCH] retention sync delete failed: {e}"),
+                }
+            }
             s.audit_log
                 .record("POST", "/api/retention/apply", "admin", 200, true);
             let body = serde_json::json!({
                 "status": "applied",
                 "trimmed_alerts": trimmed_alerts,
                 "trimmed_events": trimmed_events,
+                "trimmed_search_docs": trimmed_search_docs,
             });
             json_response(&body.to_string(), 200)
         }
@@ -3402,6 +3489,10 @@ fn handle_api(
                 {"method": "GET", "path": "/api/host/apps", "auth": true, "description": "Enumerate installed applications"},
                 {"method": "GET", "path": "/api/host/inventory", "auth": true, "description": "Full system inventory (hardware, software, services, users)"},
                 {"method": "POST", "path": "/api/policy-vm/execute", "auth": true, "description": "Execute a policy VM program"},
+                {"method": "GET", "path": "/api/wasm-extensions", "auth": true, "description": "List loaded WebAssembly extensions and their metrics"},
+                {"method": "POST", "path": "/api/wasm-extensions/upload", "auth": true, "description": "Upload and register a WebAssembly extension module"},
+                {"method": "POST", "path": "/api/wasm-extensions/run", "auth": true, "description": "Run all loaded WebAssembly extensions against a sample event"},
+                {"method": "DELETE", "path": "/api/wasm-extensions/{name}", "auth": true, "description": "Remove a loaded WebAssembly extension"},
                 {"method": "POST", "path": "/api/policy/compose", "auth": true, "description": "Compose a policy from weighted inputs"},
                 {"method": "GET", "path": "/api/quantum/key-status", "auth": true, "description": "Quantum key rotation status"},
                 {"method": "POST", "path": "/api/quantum/rotate", "auth": true, "description": "Rotate quantum key material"},
@@ -3482,6 +3573,26 @@ fn handle_api(
                 left.cmp(&right)
             });
             json_response(&serde_json::Value::Array(endpoints).to_string(), 200)
+        }
+
+        // ── Federated learning (R27) ───────────────────────────────
+        (Method::Post, "/api/federation/start") => {
+            crate::server_federated::handle_federation_start(body, state)
+        }
+        (Method::Post, "/api/federation/stop") => {
+            crate::server_federated::handle_federation_stop(state)
+        }
+        (Method::Get, "/api/federation/status") => {
+            crate::server_federated::handle_federation_status(state)
+        }
+        (Method::Get, "/api/federation/rounds") => {
+            crate::server_federated::handle_federation_rounds(state)
+        }
+        (Method::Get, "/api/federation/round") => {
+            crate::server_federated::handle_federation_fetch_round(headers, state)
+        }
+        (Method::Post, "/api/federation/round/submit") => {
+            crate::server_federated::handle_federation_submit_update(body, headers, state)
         }
 
         // ── XDR Agent Management ──────────────────────────────────
@@ -5071,21 +5182,87 @@ fn handle_api(
             let started = std::time::Instant::now();
             match read_json_value(body, 12 * 1024) {
                 Ok(v) => {
+                    let provider = v["provider"].as_str().unwrap_or("jira").to_string();
+                    let object_kind = v["object_kind"].as_str().unwrap_or("incident").to_string();
+                    let object_id = v["object_id"].as_str().unwrap_or("").to_string();
+                    let summary = v["summary"]
+                        .as_str()
+                        .unwrap_or("Enterprise sync")
+                        .to_string();
+                    let description = v
+                        .get("description")
+                        .and_then(|value| value.as_str())
+                        .unwrap_or(&summary)
+                        .to_string();
+                    let queue_or_project = v
+                        .get("queue_or_project")
+                        .and_then(|value| value.as_str())
+                        .map(std::string::ToString::to_string);
+
+                    // Lock only to read what's needed (idempotency key, a
+                    // cheap Arc clone of storage), then release the global
+                    // lock before making any network calls to Jira/
+                    // ServiceNow — those can take seconds, and every other
+                    // request needing AppState would otherwise stall behind
+                    // them.
+                    let (storage, existing_external_key) = {
+                        let s = state
+                            .lock()
+                            .unwrap_or_else(std::sync::PoisonError::into_inner);
+                        // Idempotency: if we already synced this object, reuse
+                        // its external key so a real Jira/ServiceNow client
+                        // updates the existing remote ticket instead of
+                        // creating a duplicate on retry. A previously failed
+                        // sync has no external key (empty string), which
+                        // correctly causes the next attempt to create afresh.
+                        let existing_external_key = s
+                            .enterprise
+                            .ticket_syncs()
+                            .iter()
+                            .find(|sync| {
+                                sync.provider == provider
+                                    && sync.object_kind == object_kind
+                                    && sync.object_id == object_id
+                            })
+                            .map(|sync| sync.external_key.clone())
+                            .filter(|key| !key.is_empty());
+                        (s.storage.clone(), existing_external_key)
+                    };
+
+                    let remote_result = sync_remote_ticket(
+                        &storage,
+                        &provider,
+                        existing_external_key.as_deref(),
+                        &summary,
+                        &description,
+                    );
+                    let remote_error = match &remote_result {
+                        Some(Err(error)) => Some(error.clone()),
+                        _ => None,
+                    };
+                    // `Ok(None)` = no provider configured (local bookkeeping
+                    // only); `Ok(Some(_))` = remote call succeeded; `Err(_)`
+                    // = a provider is configured but the call failed — this
+                    // must NOT be treated like "no provider" or a synthetic
+                    // external key would be fabricated for a ticket that was
+                    // never actually created remotely.
+                    let remote_outcome: Result<Option<RemoteTicket>, String> = match remote_result {
+                        Some(Ok(ticket)) => Ok(Some(ticket)),
+                        Some(Err(error)) => Err(error),
+                        None => Ok(None),
+                    };
+
                     let mut s = state
                         .lock()
                         .unwrap_or_else(std::sync::PoisonError::into_inner);
-                    let sync = s.enterprise.sync_ticket(
-                        v["provider"].as_str().unwrap_or("jira").to_string(),
-                        v["object_kind"].as_str().unwrap_or("incident").to_string(),
-                        v["object_id"].as_str().unwrap_or("").to_string(),
-                        v.get("queue_or_project")
-                            .and_then(|value| value.as_str())
-                            .map(std::string::ToString::to_string),
-                        v["summary"]
-                            .as_str()
-                            .unwrap_or("Enterprise sync")
-                            .to_string(),
+                    let sync = s.enterprise.sync_ticket_remote(
+                        provider,
+                        object_kind,
+                        object_id,
+                        queue_or_project,
+                        summary,
                         auth_identity.actor().to_string(),
+                        remote_outcome,
                     );
                     s.enterprise
                         .record_ticket_sync_metrics(started.elapsed().as_millis() as u64);
@@ -5101,7 +5278,12 @@ fn handle_api(
                         Some(&v.to_string()),
                     );
                     json_response(
-                        &serde_json::json!({"status": "synced", "sync": sync}).to_string(),
+                        &serde_json::json!({
+                            "status": "synced",
+                            "sync": sync,
+                            "remote_sync_error": remote_error,
+                        })
+                        .to_string(),
                         200,
                     )
                 }
@@ -6697,10 +6879,18 @@ fn handle_api(
                             error_json("username is required", 400)
                         } else {
                             let role = match v["role"].as_str().unwrap_or("viewer") {
-                                "admin" | "Admin" => Role::Admin,
-                                "analyst" | "Analyst" => Role::Analyst,
-                                "service" | "ServiceAccount" => Role::ServiceAccount,
-                                _ => Role::Viewer,
+                                "admin" | "Admin" => Some(Role::Admin),
+                                "analyst" | "Analyst" => Some(Role::Analyst),
+                                "viewer" | "Viewer" => Some(Role::Viewer),
+                                "service" | "service_account" | "service-account"
+                                | "ServiceAccount" => Some(Role::ServiceAccount),
+                                _ => None,
+                            };
+                            let Some(role) = role else {
+                                return error_json(
+                                    "role must be one of: admin, analyst, viewer, service-account",
+                                    400,
+                                );
                             };
                             let token = generate_token();
                             let user = User {

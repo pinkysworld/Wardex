@@ -112,35 +112,38 @@ async function installShellFleetMocks(page) {
     ['GET /api/health', { status: 'ok', version: VERSION }],
     ['GET /api/inbox', { items: [] }],
     ['GET /api/fleet/status', { status: 'healthy', collectors: 1 }],
-    ['GET /api/fleet/dashboard', {
-      fleet: {
-        total_agents: 1,
-        status_counts: { online: 1 },
-        coverage_pct: 100,
+    [
+      'GET /api/fleet/dashboard',
+      {
+        fleet: {
+          total_agents: 1,
+          status_counts: { online: 1 },
+          coverage_pct: 100,
+        },
+        events: {
+          total: 0,
+          recent_correlations: 0,
+          correlations: [],
+          analytics: {},
+          triage: { counts: {}, persistent: true, storage_path: 'var/events.json' },
+        },
+        policy: { current_version: 1, history_depth: 1 },
+        updates: {
+          available_releases: 1,
+          pending_deployments: 0,
+          release_catalog: [],
+          deployments: [],
+          active_deployments: [],
+          rollout_groups: {},
+        },
+        siem: {
+          enabled: false,
+          pending: 0,
+          total_pushed: 0,
+          total_pulled: 0,
+        },
       },
-      events: {
-        total: 0,
-        recent_correlations: 0,
-        correlations: [],
-        analytics: {},
-        triage: { counts: {}, persistent: true, storage_path: 'var/events.json' },
-      },
-      policy: { current_version: 1, history_depth: 1 },
-      updates: {
-        available_releases: 1,
-        pending_deployments: 0,
-        release_catalog: [],
-        deployments: [],
-        active_deployments: [],
-        rollout_groups: {},
-      },
-      siem: {
-        enabled: false,
-        pending: 0,
-        total_pushed: 0,
-        total_pulled: 0,
-      },
-    }],
+    ],
     ['GET /api/agents', [localAgent]],
     ['GET /api/agents/local-console/details', agentDetail],
     ['GET /api/swarm/posture', {}],
@@ -213,12 +216,47 @@ test.describe('Shell and Fleet regressions', () => {
     await page.getByTitle('Toggle sidebar').click();
     await expect(page.locator('.app')).toHaveClass(/sidebar-collapsed/);
 
-    const badgeGeometry = await page.locator('.nav-icon-text').evaluateAll((nodes) => {
-      return nodes.map((node) => {
+    // Nav items render in workflow-group order (see WORKFLOW_GROUPS in
+    // App.jsx); each icon carries a stable `data-icon` name (see
+    // SECTION_ICONS in components/icons.jsx) so this asserts the actual
+    // icon shown for each nav item, not just its position.
+    const expectedIcons = [
+      // Operations Home
+      'grid', // dashboard
+      'compass', // operator-launchpad
+      'terminal', // command-center
+      // Investigations
+      'activity', // live-monitor
+      'target', // soc-workbench
+      'chat', // assistant-workspace
+      'shield-alert', // threat-detection
+      'flask', // detection-lab
+      'bug', // malware-scanning
+      'user-check', // ueba
+      'network', // ndr
+      'graph', // attack-graph
+      // Response
+      'shield-check', // response-safety
+      'lock', // security-policy
+      // Platform
+      'server', // fleet-agents
+      'database', // infrastructure
+      'plug', // integrations
+      'pulse', // operations-health
+      'mail', // email-security
+      // Governance
+      'file-text', // reports-exports
+      'gear', // settings
+      'book', // help-docs
+    ];
+
+    const badgeGeometry = await page.locator('.nav-item .nav-icon').evaluateAll((nodes) => {
+      return nodes.map((node, index) => {
         const rect = node.getBoundingClientRect();
         const sidebarRect = node.closest('.sidebar')?.getBoundingClientRect();
         return {
-          text: node.textContent?.trim(),
+          text: `nav-icon-${index}`,
+          icon: node.getAttribute('data-icon'),
           overflowX: node.scrollWidth - node.clientWidth,
           overflowY: node.scrollHeight - node.clientHeight,
           insideSidebar: Boolean(
@@ -229,6 +267,7 @@ test.describe('Shell and Fleet regressions', () => {
     });
 
     expect(badgeGeometry.length).toBeGreaterThan(8);
+    expect(badgeGeometry.map((badge) => badge.icon)).toEqual(expectedIcons);
     for (const badge of badgeGeometry) {
       expect(badge.overflowX, `${badge.text} overflows horizontally`).toBeLessThanOrEqual(1);
       expect(badge.overflowY, `${badge.text} overflows vertically`).toBeLessThanOrEqual(1);

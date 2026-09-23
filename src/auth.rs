@@ -2,7 +2,7 @@
 // ADR-0004: Layered identity model — extends RBAC with federated identity.
 
 use chrono::{DateTime, Duration, Utc};
-use rand::Rng;
+use rand::RngExt;
 use rusqlite::{Connection, params};
 use serde::Deserialize;
 use sha2::{Digest, Sha256};
