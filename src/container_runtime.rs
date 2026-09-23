@@ -972,8 +972,15 @@ mod tests {
     /// answers a fixed script of requests: `/_ping`, `/version`,
     /// `/containers/json`, `/containers/{id}/json`, and a chunked
     /// `/events` stream. Returns the socket path.
+    /// Unix socket paths are limited to ~104 bytes (SUN_LEN) on macOS, and
+    /// its per-user `temp_dir()` under /var/folders is long enough to exceed
+    /// that once the socket name is appended, so keep test sockets in /tmp.
+    fn fake_docker_socket_dir() -> std::path::PathBuf {
+        std::path::PathBuf::from("/tmp").join(format!("wdx-docker-{}", std::process::id()))
+    }
+
     fn spawn_fake_docker() -> String {
-        let dir = std::env::temp_dir().join(format!("wardex-docker-test-{}", std::process::id()));
+        let dir = fake_docker_socket_dir();
         let _ = std::fs::create_dir_all(&dir);
         let sock_path = dir.join(format!("docker-{}.sock", rand_suffix()));
         let sock_path_str = sock_path.to_string_lossy().to_string();
@@ -1301,7 +1308,7 @@ mod tests {
     /// allocate gigabytes or hang.
     #[test]
     fn fake_daemon_oversized_content_length_is_rejected() {
-        let dir = std::env::temp_dir().join(format!("wardex-docker-test-{}", std::process::id()));
+        let dir = fake_docker_socket_dir();
         let _ = std::fs::create_dir_all(&dir);
         let sock_path = dir.join(format!("docker-oversize-{}.sock", rand_suffix()));
         let sock_path_str = sock_path.to_string_lossy().to_string();

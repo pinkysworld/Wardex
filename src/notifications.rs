@@ -1360,6 +1360,7 @@ mod tests {
         assert!(result.is_ok(), "smtp_send failed: {result:?}");
     }
 
+    #[cfg(feature = "tls")]
     /// Generates a self-signed certificate + key for the fake STARTTLS
     /// server, using the `rcgen` dev-dependency (test-only; no production
     /// code path depends on it).
@@ -1378,6 +1379,7 @@ mod tests {
         (cert_der, key_der, pem)
     }
 
+    #[cfg(feature = "tls")]
     /// A fake SMTP server that advertises STARTTLS and AUTH, performs a real
     /// TLS handshake with a self-signed certificate, and validates the
     /// client authenticated with AUTH PLAIN before accepting the message.
@@ -1494,6 +1496,7 @@ mod tests {
         (port, cert_pem, handle)
     }
 
+    #[cfg(feature = "tls")]
     #[test]
     fn smtp_starttls_with_auth_against_fake_tls_server() {
         use std::io::Write as _;
@@ -1517,6 +1520,7 @@ mod tests {
         let _ = std::io::stdout().flush();
     }
 
+    #[cfg(feature = "tls")]
     #[test]
     fn smtp_starttls_rejects_untrusted_certificate() {
         // Same fake server, but the client does NOT trust its self-signed
