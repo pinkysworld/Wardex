@@ -23,7 +23,16 @@ use std::time::{Duration, Instant};
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct VirusTotalConfig {
     /// VT v3 API key (or a secret reference resolved before use).
-    #[serde(skip_serializing)]
+    ///
+    /// Not `#[serde(skip_serializing)]`: this struct round-trips through the
+    /// config store as its own JSON (see `save_stored_json`/
+    /// `load_stored_json`), and skipping it on serialize would silently
+    /// discard the key on every save (or, without a `#[serde(default)]`
+    /// alongside it, fail deserialization entirely and reset the whole
+    /// config to defaults on next load). The HTTP handlers in
+    /// `server_integrations_ext.rs` build their own redacted view
+    /// (`has_api_key: bool`) rather than serializing this struct directly.
+    #[serde(default)]
     pub api_key: String,
     /// Whether the VirusTotal enrichment provider is enabled.
     #[serde(default)]
@@ -72,7 +81,10 @@ impl Default for VirusTotalConfig {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct AbuseIpDbConfig {
     /// AbuseIPDB v2 API key (or a secret reference resolved before use).
-    #[serde(skip_serializing)]
+    ///
+    /// Not `#[serde(skip_serializing)]` — see the comment on
+    /// `VirusTotalConfig::api_key` for why.
+    #[serde(default)]
     pub api_key: String,
     /// Whether the AbuseIPDB enrichment provider is enabled.
     #[serde(default)]
@@ -299,6 +311,22 @@ impl VirusTotalClient {
             };
         }
 
+        if !is_valid_indicator(kind, indicator) {
+            return EnrichmentResult {
+                provider: "virustotal".into(),
+                indicator: indicator.into(),
+                kind,
+                success: false,
+                malicious: false,
+                score: 0,
+                summary: format!("indicator is not a valid {kind:?} value"),
+                raw: None,
+                cached: false,
+                error: Some("invalid_indicator".into()),
+                looked_up_at: now,
+            };
+        }
+
         let key = self.cache_key(kind, indicator);
         if let Some(cached) = self
             .cache
@@ -339,9 +367,14 @@ impl VirusTotalClient {
     fn build_url(&self, kind: IndicatorKind, indicator: &str) -> String {
         let base = self.config.base_url.trim_end_matches('/');
         match kind {
-            IndicatorKind::FileHash => format!("{base}/files/{indicator}"),
-            IndicatorKind::IpAddress => format!("{base}/ip_addresses/{indicator}"),
-            IndicatorKind::Domain => format!("{base}/domains/{indicator}"),
+            // `indicator` was already validated by `is_valid_indicator`
+            // (hex-only hash, parses as `IpAddr`, or a hostname-grammar
+            // domain), but it is percent-encoded here too as defense in
+            // depth against path-injection (`/`, `?`, `#`, `..`) if that
+            // validation is ever loosened or bypassed.
+            IndicatorKind::FileHash => format!("{base}/files/{}", urlencode(indicator)),
+            IndicatorKind::IpAddress => format!("{base}/ip_addresses/{}", urlencode(indicator)),
+            IndicatorKind::Domain => format!("{base}/domains/{}", urlencode(indicator)),
             IndicatorKind::Url => {
                 // VT identifies URLs by the base64url (no padding) of the URL.
                 use base64::Engine;
@@ -610,6 +643,47 @@ impl AbuseIpDbClient {
     }
 }
 
+/// Validate that `indicator` actually looks like the kind of indicator it
+/// claims to be, before it is interpolated into a request path. Indicators
+/// can originate from attacker-influenced telemetry (a process command
+/// line, a DNS query, a file path), so this rejects anything containing
+/// path-traversal or URL-structure characters (`/`, `?`, `#`, `..`) by
+/// construction, rather than trying to block them piecemeal.
+fn is_valid_indicator(kind: IndicatorKind, indicator: &str) -> bool {
+    match kind {
+        IndicatorKind::FileHash => {
+            let len = indicator.len();
+            (len == 32 || len == 40 || len == 64)
+                && indicator.bytes().all(|b| b.is_ascii_hexdigit())
+        }
+        IndicatorKind::IpAddress => indicator.trim().parse::<std::net::IpAddr>().is_ok(),
+        IndicatorKind::Domain => is_valid_hostname(indicator),
+        // URLs are turned into an opaque base64url id before being placed
+        // in the path (see `build_url`), so there is no path-injection
+        // surface for this kind; only reject the degenerate empty case.
+        IndicatorKind::Url => !indicator.trim().is_empty(),
+    }
+}
+
+/// A conservative hostname grammar: 1-253 total characters, dot-separated
+/// labels of 1-63 characters each, each label alphanumeric-or-hyphen and
+/// not starting/ending with a hyphen. Deliberately stricter than what DNS
+/// technically allows, since the only consumer is a URL path segment.
+fn is_valid_hostname(s: &str) -> bool {
+    if s.is_empty() || s.len() > 253 {
+        return false;
+    }
+    s.split('.').all(|label| {
+        !label.is_empty()
+            && label.len() <= 63
+            && !label.starts_with('-')
+            && !label.ends_with('-')
+            && label
+                .bytes()
+                .all(|b| b.is_ascii_alphanumeric() || b == b'-')
+    })
+}
+
 fn urlencode(s: &str) -> String {
     let mut out = String::with_capacity(s.len());
     for b in s.bytes() {
@@ -732,7 +806,7 @@ mod tests {
             base_url,
             ..Default::default()
         });
-        let result = client.lookup(IndicatorKind::FileHash, "deadbeef");
+        let result = client.lookup(IndicatorKind::FileHash, "d41d8cd98f00b204e9800998ecf8427e");
         assert!(result.success);
         assert!(result.malicious);
         assert!(result.score > 0);
@@ -878,5 +952,94 @@ mod tests {
         assert!(limiter.check().is_ok());
         assert!(limiter.check().is_ok());
         assert!(limiter.check().is_err());
+    }
+
+    // ── Indicator validation / path-injection hardening ─────────────────
+
+    fn vt_client_for_url_test() -> VirusTotalClient {
+        VirusTotalClient::new(VirusTotalConfig {
+            api_key: "test-key".into(),
+            enabled: true,
+            requests_per_minute: 100,
+            base_url: "https://vt.example".into(),
+            ..Default::default()
+        })
+    }
+
+    #[test]
+    fn vt_rejects_path_traversal_hash_without_network() {
+        let client = vt_client_for_url_test();
+        for bad in [
+            "../../etc/passwd",
+            "abc/def",
+            "abc?def",
+            "abc#def",
+            "..",
+            "not-hex-but-32-chars-long-string",
+        ] {
+            let result = client.lookup(IndicatorKind::FileHash, bad);
+            assert!(!result.success, "expected {bad:?} to be rejected");
+            assert_eq!(result.error.as_deref(), Some("invalid_indicator"));
+        }
+    }
+
+    #[test]
+    fn vt_rejects_path_traversal_ip_without_network() {
+        let client = vt_client_for_url_test();
+        for bad in ["1.2.3.4/../secret", "1.2.3.4?x=1", "not-an-ip", "a#b"] {
+            let result = client.lookup(IndicatorKind::IpAddress, bad);
+            assert!(!result.success, "expected {bad:?} to be rejected");
+            assert_eq!(result.error.as_deref(), Some("invalid_indicator"));
+        }
+    }
+
+    #[test]
+    fn vt_rejects_path_traversal_domain_without_network() {
+        let client = vt_client_for_url_test();
+        for bad in [
+            "evil.com/../../admin",
+            "evil.com?x=1",
+            "evil.com#frag",
+            "..",
+            "-leading-hyphen.com",
+            "",
+        ] {
+            let result = client.lookup(IndicatorKind::Domain, bad);
+            assert!(!result.success, "expected {bad:?} to be rejected");
+            assert_eq!(result.error.as_deref(), Some("invalid_indicator"));
+        }
+    }
+
+    #[test]
+    fn vt_accepts_valid_indicators_of_each_kind() {
+        assert!(is_valid_indicator(
+            IndicatorKind::FileHash,
+            "d41d8cd98f00b204e9800998ecf8427e"
+        ));
+        assert!(is_valid_indicator(
+            IndicatorKind::FileHash,
+            "da39a3ee5e6b4b0d3255bfef95601890afd80709"
+        ));
+        assert!(is_valid_indicator(
+            IndicatorKind::FileHash,
+            "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+        ));
+        assert!(is_valid_indicator(IndicatorKind::IpAddress, "1.2.3.4"));
+        assert!(is_valid_indicator(IndicatorKind::IpAddress, "::1"));
+        assert!(is_valid_indicator(IndicatorKind::Domain, "example.com"));
+        assert!(is_valid_indicator(
+            IndicatorKind::Domain,
+            "sub.example.co.uk"
+        ));
+    }
+
+    #[test]
+    fn vt_build_url_percent_encodes_indicator() {
+        let client = vt_client_for_url_test();
+        // A domain that passes validation but still exercises the encoder
+        // (hyphens/dots are in the allowed unreserved set already, so this
+        // mainly documents that build_url routes through `urlencode`).
+        let url = client.build_url(IndicatorKind::Domain, "example.com");
+        assert_eq!(url, "https://vt.example/domains/example.com");
     }
 }
