@@ -989,7 +989,10 @@ export default function FleetAgents() {
               <div className="metric-value">{dash?.total_agents ?? dash?.agents ?? '—'}</div>
               <div className="metric-sub">Coverage across the current workspace</div>
             </div>
-            <div className="card metric" data-tone={queueHealth.offline > 0 ? 'critical' : 'neutral'}>
+            <div
+              className="card metric"
+              data-tone={queueHealth.offline > 0 ? 'critical' : 'neutral'}
+            >
               <div className="metric-label">Offline Now</div>
               <div className="metric-value">{queueHealth.offline}</div>
               <div className="metric-sub">Endpoints that need recovery attention</div>
