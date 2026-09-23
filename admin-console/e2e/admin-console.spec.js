@@ -121,8 +121,9 @@ test.describe('Admin console smoke', () => {
     await expect(page).toHaveURL(/\/detection/);
     await expect(page.getByText('Detection Engineering Workspace')).toBeVisible({ timeout: 15000 });
 
-    await page.getByRole('button', { name: 'More' }).click();
-    await page.getByRole('menuitem', { name: 'Help For View' }).click();
+    // At the default (wide, >=1280px) Playwright viewport, Help For View and
+    // Share Link render inline in the topbar instead of behind "More".
+    await page.getByRole('button', { name: /Help For View/ }).click();
     await expect(page).toHaveURL(/\/help/);
     await expect(page.locator('.topbar-title')).toHaveText('Help & Docs');
     await expect(page.getByText('Detection Support')).toBeVisible();
@@ -132,10 +133,8 @@ test.describe('Admin console smoke', () => {
     await page.getByRole('button', { name: 'Close keyboard shortcuts' }).click();
     await expect(page.getByText('Keyboard Shortcuts')).toHaveCount(0);
 
-    await page.getByRole('button', { name: 'More' }).click();
-    await page.getByRole('menuitem', { name: 'Share Link' }).click();
-    await page.getByRole('button', { name: 'More' }).click();
-    await expect(page.getByRole('menuitem', { name: 'Copied' })).toBeVisible();
+    await page.getByRole('button', { name: 'Share Link' }).click();
+    await expect(page.getByRole('button', { name: 'Copied' })).toBeVisible();
 
     const initialTheme = await page.locator('html').getAttribute('data-theme');
     await page.locator('button[title="Light mode"], button[title="Dark mode"]').click();

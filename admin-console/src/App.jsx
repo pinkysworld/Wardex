@@ -35,6 +35,7 @@ import {
   IconStar,
   IconSun,
   SectionIcon,
+  sectionIconName,
 } from './components/icons.jsx';
 
 // ── Recent Items (persisted in localStorage) ─────────────────
@@ -64,6 +65,66 @@ function normalizeSsoProviders(providers) {
     seen.add(key);
     return true;
   });
+}
+
+/** Topbar viewport breakpoint (px) above which secondary actions (Help For
+ * View, Share Link) render inline instead of collapsing into the "More"
+ * overflow menu. */
+const WIDE_TOPBAR_BREAKPOINT = 1280;
+
+function isWideTopbarViewport() {
+  return typeof window !== 'undefined' && window.innerWidth >= WIDE_TOPBAR_BREAKPOINT;
+}
+
+/** True once the viewport is wide enough to show topbar secondary actions
+ * inline rather than behind the "More" overflow menu. Re-evaluated on
+ * resize. */
+function useIsWideTopbar() {
+  const [isWide, setIsWide] = useState(isWideTopbarViewport);
+  useEffect(() => {
+    if (typeof window === 'undefined') return undefined;
+    const handleResize = () => setIsWide(isWideTopbarViewport());
+    window.addEventListener('resize', handleResize);
+    return () => window.removeEventListener('resize', handleResize);
+  }, []);
+  return isWide;
+}
+
+/**
+ * Shared dismissal behaviour for a popover/menu: closes on Escape (moving
+ * focus back to the trigger that opened it) and on a pointer press outside
+ * both the trigger and the popover content.
+ *
+ * `open` is whatever "is this open" value the caller already tracks
+ * (a boolean, or a location-key comparison); `onClose` should clear it.
+ */
+function useDismissablePopover(open, onClose, { triggerRef, contentRef }) {
+  useEffect(() => {
+    if (!open) return undefined;
+
+    const handleKeyDown = (event) => {
+      if (event.key !== 'Escape') return;
+      event.stopPropagation();
+      onClose();
+      triggerRef.current?.focus();
+    };
+
+    const handlePointerDown = (event) => {
+      const target = event.target;
+      if (triggerRef.current?.contains(target)) return;
+      if (contentRef.current?.contains(target)) return;
+      onClose();
+    };
+
+    document.addEventListener('keydown', handleKeyDown, true);
+    document.addEventListener('mousedown', handlePointerDown, true);
+    document.addEventListener('touchstart', handlePointerDown, true);
+    return () => {
+      document.removeEventListener('keydown', handleKeyDown, true);
+      document.removeEventListener('mousedown', handlePointerDown, true);
+      document.removeEventListener('touchstart', handlePointerDown, true);
+    };
+  }, [open, onClose, triggerRef, contentRef]);
 }
 
 function useRecentItems() {
@@ -359,10 +420,38 @@ export default function App() {
   const [pinnedSections, setPinnedSections] = useState(() => readStoredPinnedSections());
   const pinnedSectionsRef = useRef(pinnedSections);
   const showInbox = showInboxLocationKey === location.key;
+  const isWideTopbar = useIsWideTopbar();
+
+  const inboxTriggerRef = useRef(null);
+  const inboxPopoverRef = useRef(null);
+  const topbarActionsTriggerRef = useRef(null);
+  const topbarActionsMenuRef = useRef(null);
 
   useEffect(() => {
     pinnedSectionsRef.current = pinnedSections;
   }, [pinnedSections]);
+
+  // Close transient topbar popovers whenever the route changes. Gated on
+  // `location.pathname` rather than `location.key`: some lazy routes
+  // re-navigate (replacing the history entry) on mount, which would
+  // immediately re-close a menu the user just opened on the new page if
+  // this were keyed off `location.key` instead.
+  useEffect(() => {
+    setShowTopbarActions(false);
+    setShowInboxLocationKey(null);
+  }, [location.pathname]);
+
+  const closeTopbarActions = useCallback(() => setShowTopbarActions(false), []);
+  const closeInbox = useCallback(() => setShowInboxLocationKey(null), []);
+
+  useDismissablePopover(showTopbarActions, closeTopbarActions, {
+    triggerRef: topbarActionsTriggerRef,
+    contentRef: topbarActionsMenuRef,
+  });
+  useDismissablePopover(showInbox, closeInbox, {
+    triggerRef: inboxTriggerRef,
+    contentRef: inboxPopoverRef,
+  });
 
   useEffect(() => {
     if (authenticated) return undefined;
@@ -697,7 +786,11 @@ export default function App() {
                   to={section.path}
                   title={section.label}
                 >
-                  <span className="nav-icon" aria-hidden="true">
+                  <span
+                    className="nav-icon"
+                    data-icon={sectionIconName(section.id)}
+                    aria-hidden="true"
+                  >
                     <SectionIcon sectionId={section.id} />
                   </span>
                   <span className="nav-label">{section.label}</span>
@@ -737,7 +830,11 @@ export default function App() {
                       title={section.label}
                       aria-current={currentSection.id === section.id ? 'page' : undefined}
                     >
-                      <span className="nav-icon" aria-hidden="true">
+                      <span
+                        className="nav-icon"
+                        data-icon={sectionIconName(section.id)}
+                        aria-hidden="true"
+                      >
                         <SectionIcon sectionId={section.id} />
                       </span>
                       {!sidebarCollapsed && <span className="nav-label">{section.label}</span>}
@@ -868,6 +965,7 @@ export default function App() {
             {authenticated && (
               <div style={{ position: 'relative' }}>
                 <button
+                  ref={inboxTriggerRef}
                   className="btn btn-sm"
                   type="button"
                   onClick={() =>
@@ -885,7 +983,10 @@ export default function App() {
                 </button>
                 {showInbox && (
                   <div
+                    ref={inboxPopoverRef}
                     className="card"
+                    role="dialog"
+                    aria-label="Operator Inbox"
                     style={{
                       position: 'absolute',
                       right: 0,
@@ -1022,9 +1123,34 @@ export default function App() {
                 </span>
               </button>
             )}
-            {authenticated && (
+            {authenticated && isWideTopbar && currentSection.path !== '/help' && (
+              <button
+                className="btn btn-sm btn-icon-labelled"
+                type="button"
+                onClick={() =>
+                  navigate(buildContextualHelpHref(currentSection.id, location.search))
+                }
+                title="Open contextual help for this workspace"
+              >
+                <IconHelp size={14} />
+                <span className="topbar-action-label">Help For View</span>
+              </button>
+            )}
+            {authenticated && isWideTopbar && (
+              <button
+                className="btn btn-sm btn-icon-labelled"
+                type="button"
+                onClick={copyShareLink}
+                title="Copy shareable deep-link to clipboard"
+              >
+                <IconLink size={14} />
+                <span className="topbar-action-label">{linkCopied ? 'Copied' : 'Share Link'}</span>
+              </button>
+            )}
+            {authenticated && !isWideTopbar && (
               <div className="topbar-overflow">
                 <button
+                  ref={topbarActionsTriggerRef}
                   className="btn btn-sm btn-icon-labelled"
                   type="button"
                   onClick={() => setShowTopbarActions((current) => !current)}
@@ -1037,9 +1163,22 @@ export default function App() {
                 </button>
                 {showTopbarActions && (
                   <div
+                    ref={topbarActionsMenuRef}
                     className="card mobile-topbar-actions-menu"
                     role="menu"
                     aria-label="More actions"
+                    onKeyDown={(event) => {
+                      if (event.key !== 'ArrowDown' && event.key !== 'ArrowUp') return;
+                      event.preventDefault();
+                      const items = Array.from(
+                        topbarActionsMenuRef.current?.querySelectorAll('[role="menuitem"]') || [],
+                      );
+                      if (items.length === 0) return;
+                      const currentIndex = items.indexOf(document.activeElement);
+                      const delta = event.key === 'ArrowDown' ? 1 : -1;
+                      const nextIndex = (currentIndex + delta + items.length) % items.length;
+                      items[nextIndex]?.focus();
+                    }}
                   >
                     {currentSection.path !== '/help' && (
                       <button
