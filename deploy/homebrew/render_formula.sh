@@ -50,9 +50,9 @@ class Wardex < Formula
   end
 
   post_install_steps do
-    mkdir_p "wardex"
-    mkdir_p "wardex/backups"
-    mkdir_p "log/wardex"
+    mkdir_p "wardex", base: :var
+    mkdir_p "wardex/backups", base: :var
+    mkdir_p "log/wardex", base: :var
   end
 
   service do
