@@ -65,10 +65,17 @@ fn enroll_agent(port: u16, admin_token: &str, hostname: &str) -> EnrolledAgent {
 /// x0 + x1 > 0. Padded to the 7-feature `TriageFeatures` shape used by the
 /// server's built-in federation model (extra dimensions held at 0).
 fn synthetic_dataset(seed: u64, n: usize) -> Vec<(Vec<f64>, f64)> {
-    let mut state = seed.wrapping_mul(6364136223846793005).wrapping_add(1442695040888963407);
+    let mut state = seed
+        .wrapping_mul(6364136223846793005)
+        .wrapping_add(1442695040888963407);
     let mut next = || {
-        state = state.wrapping_mul(6364136223846793005).wrapping_add(1442695040888963407);
-        ((state >> 33) as f64 / u32::MAX as f64) * 4.0 - 2.0
+        state = state
+            .wrapping_mul(6364136223846793005)
+            .wrapping_add(1442695040888963407);
+        // Top 53 bits give a uniform value in [0, 1); keep the full
+        // mantissa's worth of entropy rather than truncating to `u32`,
+        // which would bias the sample toward negative values.
+        (((state >> 11) as f64) / (1u64 << 53) as f64) * 4.0 - 2.0
     };
     (0..n)
         .map(|_| {
@@ -106,19 +113,23 @@ fn federation_lifecycle_start_train_submit_aggregate_status() {
         agent.data = synthetic_dataset(i as u64 + 1, 150);
     }
 
-    // Start the federation with a config tuned for a fast, near-deterministic test.
+    // Start the federation with a config tuned for a fast, near-deterministic
+    // test: few rounds (each round is 3 real HTTP submissions, and the test
+    // server's write-rate limiter caps writes per minute), a generous
+    // epsilon (small noise) for stability, and a convergence target that is
+    // reachable within the round budget.
     let config = FederationConfig {
         enabled: true,
         epsilon_per_round: 80.0, // large epsilon -> small noise, for test stability
         delta: 1e-3,
-        clip_norm: 25.0,
+        clip_norm: 8.0,
         min_participants: 3,
         round_deadline_secs: 3600,
-        max_rounds: 25,
-        target_convergence_delta: 1e-6, // effectively "run until max_rounds"
+        max_rounds: 8,
+        target_convergence_delta: 0.05,
         total_epsilon_budget_per_agent: 100_000.0,
         local_epochs: 8,
-        learning_rate: 0.4,
+        learning_rate: 0.3,
     };
     let start_resp: serde_json::Value = ureq::post(&format!("{}/api/federation/start", base(port)))
         .set("Authorization", &auth_header(&admin_token))
@@ -201,8 +212,7 @@ fn federation_lifecycle_start_train_submit_aggregate_status() {
 #[test]
 fn federation_round_endpoints_require_agent_identity() {
     let (port, _admin_token) = spawn_test_server();
-    let resp = ureq::get(&format!("{}/api/federation/round", base(port)))
-        .call();
+    let resp = ureq::get(&format!("{}/api/federation/round", base(port))).call();
     match resp {
         Ok(r) => assert_eq!(r.status(), 401),
         Err(ureq::Error::Status(status, _)) => assert_eq!(status, 401),
@@ -213,8 +223,7 @@ fn federation_round_endpoints_require_agent_identity() {
 #[test]
 fn federation_admin_endpoints_require_bearer_auth() {
     let (port, _admin_token) = spawn_test_server();
-    let resp = ureq::post(&format!("{}/api/federation/start", base(port)))
-        .send_string("{}");
+    let resp = ureq::post(&format!("{}/api/federation/start", base(port))).send_string("{}");
     match resp {
         Ok(r) => assert_eq!(r.status(), 401),
         Err(ureq::Error::Status(status, _)) => assert_eq!(status, 401),

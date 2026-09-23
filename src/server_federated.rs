@@ -64,10 +64,7 @@ struct StartFederationRequest {
 /// POST /api/federation/start — (re)start a federation round-robin from a
 /// freshly zero-initialized global model. Idempotent: calling it again
 /// resets model version, history, and per-agent budgets.
-pub(crate) fn handle_federation_start(
-    body: &[u8],
-    state: &Arc<Mutex<AppState>>,
-) -> Response<Body> {
+pub(crate) fn handle_federation_start(body: &[u8], state: &Arc<Mutex<AppState>>) -> Response<Body> {
     let body = match read_body_limited(body, 64 * 1024) {
         Ok(b) => b,
         Err(e) => return error_json(&e, 400),
@@ -90,8 +87,7 @@ pub(crate) fn handle_federation_start(
         config.enabled = true;
         s.config.federation = config.clone();
         let dim = FEDERATION_PARAM_DIM;
-        s.federation
-            .start(config, vec![0.0; dim], now);
+        s.federation.start(config, vec![0.0; dim], now);
         s.federation.clone()
     };
     persist_federation_state(state);
@@ -249,9 +245,8 @@ pub(crate) fn handle_federation_fetch_round(
             Ok(json) => json_response(&json, 200),
             Err(e) => error_json(&format!("serialization error: {e}"), 500),
         },
-        Err(crate::federated::FedError::Disabled) | Err(crate::federated::FedError::NoOpenRound) => {
-            json_response("{}", 204)
-        }
+        Err(crate::federated::FedError::Disabled)
+        | Err(crate::federated::FedError::NoOpenRound) => json_response("{}", 204),
         Err(e) => fed_error_response(e),
     }
 }

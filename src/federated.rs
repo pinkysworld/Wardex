@@ -196,7 +196,12 @@ impl LogisticRegressionModel {
     pub fn predict_proba(&self, x: &[f64]) -> f64 {
         let n = x.len().min(self.weights.len().saturating_sub(1));
         let bias = self.weights.last().copied().unwrap_or(0.0);
-        let z: f64 = self.weights[..n].iter().zip(&x[..n]).map(|(w, v)| w * v).sum::<f64>() + bias;
+        let z: f64 = self.weights[..n]
+            .iter()
+            .zip(&x[..n])
+            .map(|(w, v)| w * v)
+            .sum::<f64>()
+            + bias;
         Self::sigmoid(z)
     }
 }
@@ -250,7 +255,11 @@ impl FederatedModel for LogisticRegressionModel {
             }
             last_loss = loss_sum / n;
         }
-        let weight_delta: Vec<f64> = w.iter().zip(self.weights.iter()).map(|(a, b)| a - b).collect();
+        let weight_delta: Vec<f64> = w
+            .iter()
+            .zip(self.weights.iter())
+            .map(|(a, b)| a - b)
+            .collect();
         LocalTrainResult {
             weight_delta,
             sample_count: samples.len(),
@@ -402,7 +411,10 @@ impl std::fmt::Display for FedError {
                 write!(f, "this agent already submitted an update for this round")
             }
             FedError::InvalidShape { expected, got } => {
-                write!(f, "parameter vector shape mismatch: expected {expected}, got {got}")
+                write!(
+                    f,
+                    "parameter vector shape mismatch: expected {expected}, got {got}"
+                )
             }
             FedError::NormExceeded { max } => {
                 write!(f, "submitted update norm exceeds allowed bound ({max})")
@@ -510,8 +522,12 @@ impl FederationCoordinator {
         if round.status != RoundStatus::Open {
             return Err(FedError::NoOpenRound);
         }
+        // An agent whose remaining budget can no longer cover even one more
+        // round's epsilon cost is refused here, not just at submission time
+        // — otherwise it would keep polling successfully only to have every
+        // submission rejected.
         if let Some(acct) = self.budgets.get(agent_id)
-            && acct.is_exhausted()
+            && acct.budget_remaining() < self.config.epsilon_per_round
         {
             return Err(FedError::BudgetExhausted);
         }
@@ -567,11 +583,8 @@ impl FederationCoordinator {
             // Generous defense-in-depth bound: clipped norm plus a wide
             // multiple of the noise scale so legitimate noised submissions
             // are never rejected, but a wildly out-of-range payload is.
-            let mechanism = GaussianMechanism::new(
-                self.config.epsilon_per_round,
-                self.config.delta,
-                clip_norm,
-            );
+            let mechanism =
+                GaussianMechanism::new(self.config.epsilon_per_round, self.config.delta, clip_norm);
             let max_allowed = clip_norm + 12.0 * mechanism.sigma.max(0.001) + 1.0;
             let observed = l2_norm(&params);
             if observed > max_allowed {
@@ -654,12 +667,8 @@ impl FederationCoordinator {
         }
         self.model_version += 1;
         let convergence_delta = l2_norm(&aggregated_delta);
-        let avg_loss = round
-            .submissions
-            .iter()
-            .map(|s| s.loss)
-            .sum::<f64>()
-            / round.submissions.len() as f64;
+        let avg_loss =
+            round.submissions.iter().map(|s| s.loss).sum::<f64>() / round.submissions.len() as f64;
 
         let completed = CompletedRound {
             round_id: round.round_id,
@@ -886,7 +895,10 @@ mod tests {
         let mut config = cfg();
         config.enabled = false;
         let coord = FederationCoordinator::new(config, 2);
-        assert!(matches!(coord.fetch_round("agent-a"), Err(FedError::Disabled)));
+        assert!(matches!(
+            coord.fetch_round("agent-a"),
+            Err(FedError::Disabled)
+        ));
     }
 
     // ── multi-participant convergence simulation ───────────────────────────
@@ -900,7 +912,10 @@ mod tests {
             let mut state = seed.wrapping_mul(6364136223846793005).wrapping_add(1);
             let mut next = || {
                 state = state.wrapping_mul(6364136223846793005).wrapping_add(1);
-                ((state >> 33) as f64 / u32::MAX as f64) * 4.0 - 2.0
+                // Top 53 bits give a uniform value in [0, 1); keep the full
+                // mantissa's worth of entropy rather than truncating to
+                // `u32`, which would bias the sample toward negative values.
+                (((state >> 11) as f64) / (1u64 << 53) as f64) * 4.0 - 2.0
             };
             (0..n)
                 .map(|_| {
@@ -926,7 +941,8 @@ mod tests {
         let mut coord = FederationCoordinator::new(config.clone(), model.parameters().len());
         coord.start(config.clone(), model.parameters(), 0);
 
-        let agents: Vec<Vec<(Vec<f64>, f64)>> = (0..4).map(|i| make_agent_data(i + 1, 200)).collect();
+        let agents: Vec<Vec<(Vec<f64>, f64)>> =
+            (0..4).map(|i| make_agent_data(i + 1, 200)).collect();
 
         let mut current_global = LogisticRegressionModel::new(2);
         for round_num in 0..config.max_rounds {
@@ -969,7 +985,11 @@ mod tests {
         let correct = test_set
             .iter()
             .filter(|(x, y)| {
-                let pred = if final_model.predict_proba(x) > 0.5 { 1.0 } else { 0.0 };
+                let pred = if final_model.predict_proba(x) > 0.5 {
+                    1.0
+                } else {
+                    0.0
+                };
                 (pred - y).abs() < 1e-9
             })
             .count();
