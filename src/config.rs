@@ -267,6 +267,13 @@ pub struct Config {
     /// existing config files load unchanged.
     #[serde(default)]
     pub search: crate::search::EventStoreConfig,
+    /// Federated-learning configuration (disabled by default). See
+    /// `docs/FEDERATED_LEARNING.md` for the protocol and threat model.
+    #[serde(default)]
+    pub federation: crate::federated::FederationConfig,
+    /// Real WebAssembly extension runtime (see `wasm_runtime` module).
+    #[serde(default)]
+    pub wasm_runtime: crate::wasm_runtime::WasmRuntimeSettings,
 }
 
 /// `[collection]` — local telemetry collection cadence, documented in
@@ -507,13 +514,6 @@ impl Default for AttestationSettings {
             trust_store_path: String::new(),
         }
     }
-    /// Federated-learning configuration (disabled by default). See
-    /// `docs/FEDERATED_LEARNING.md` for the protocol and threat model.
-    #[serde(default)]
-    pub federation: crate::federated::FederationConfig,
-    /// Real WebAssembly extension runtime (see `wasm_runtime` module).
-    #[serde(default)]
-    pub wasm_runtime: crate::wasm_runtime::WasmRuntimeSettings,
 }
 
 /// Security-related settings for token management and session control.
