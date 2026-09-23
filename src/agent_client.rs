@@ -718,7 +718,7 @@ pub fn run_agent(
             config.monitor.alert_threshold
         },
     ));
-    let active_interval = Arc::new(Mutex::new(config.collection.collection_interval_secs));
+    let active_interval = Arc::new(Mutex::new(config.effective_collection_interval_secs()));
 
     // Background policy enforcement thread
     let policy_shutdown = shutdown.clone();
@@ -764,7 +764,7 @@ pub fn run_agent(
     });
 
     // Run local monitor, collecting alerts for forwarding
-    let interval = Duration::from_secs(config.collection.collection_interval_secs);
+    let interval = Duration::from_secs(config.effective_collection_interval_secs());
 
     let mut detector = crate::detector::AnomalyDetector::default();
     let policy = crate::policy::PolicyEngine;
@@ -878,7 +878,7 @@ pub fn run_agent(
         }
 
         // Re-report inventory periodically
-        let elapsed = sample_count * config.collection.collection_interval_secs;
+        let elapsed = sample_count * config.effective_collection_interval_secs();
         if elapsed - last_inventory_at >= inventory_interval {
             last_inventory_at = elapsed;
             let inv = crate::inventory::collect_inventory();

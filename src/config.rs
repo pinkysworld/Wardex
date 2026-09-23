@@ -177,7 +177,7 @@ impl Default for MonitorScopeSettings {
     }
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize)]
 pub struct MonitorSettings {
     pub interval_secs: u64,
     pub alert_threshold: f32,
@@ -190,6 +190,12 @@ pub struct MonitorSettings {
     pub watch_paths: Vec<String>,
     #[serde(default)]
     pub scope: MonitorScopeSettings,
+    /// True when `interval_secs` was explicitly present in the parsed config
+    /// file, as opposed to filled in from its default. Not serialized; used
+    /// by [`CollectionSettings::effective_interval_secs`] to decide whether
+    /// a "both set and differ" deprecation note applies.
+    #[serde(skip)]
+    pub interval_secs_explicit: bool,
 }
 
 impl Default for MonitorSettings {
@@ -205,8 +211,62 @@ impl Default for MonitorSettings {
             cef: false,
             watch_paths: Vec::new(),
             scope: MonitorScopeSettings::default(),
+            interval_secs_explicit: false,
         }
     }
+}
+
+impl<'de> Deserialize<'de> for MonitorSettings {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: serde::Deserializer<'de>,
+    {
+        #[derive(Deserialize)]
+        #[serde(rename_all = "snake_case")]
+        struct Raw {
+            #[serde(default)]
+            interval_secs: Option<u64>,
+            #[serde(default = "default_monitor_alert_threshold")]
+            alert_threshold: f32,
+            #[serde(default = "default_monitor_alert_log")]
+            alert_log: String,
+            #[serde(default)]
+            dry_run: bool,
+            #[serde(default)]
+            duration_secs: u64,
+            #[serde(default)]
+            webhook_url: Option<String>,
+            #[serde(default)]
+            syslog: bool,
+            #[serde(default)]
+            cef: bool,
+            #[serde(default)]
+            watch_paths: Vec<String>,
+            #[serde(default)]
+            scope: MonitorScopeSettings,
+        }
+        let raw = Raw::deserialize(deserializer)?;
+        Ok(MonitorSettings {
+            interval_secs: raw.interval_secs.unwrap_or(5),
+            alert_threshold: raw.alert_threshold,
+            alert_log: raw.alert_log,
+            dry_run: raw.dry_run,
+            duration_secs: raw.duration_secs,
+            webhook_url: raw.webhook_url,
+            syslog: raw.syslog,
+            cef: raw.cef,
+            watch_paths: raw.watch_paths,
+            scope: raw.scope,
+            interval_secs_explicit: raw.interval_secs.is_some(),
+        })
+    }
+}
+
+fn default_monitor_alert_threshold() -> f32 {
+    3.5
+}
+fn default_monitor_alert_log() -> String {
+    "var/alerts.jsonl".into()
 }
 
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
@@ -278,15 +338,24 @@ pub struct Config {
 
 /// `[collection]` — local telemetry collection cadence, documented in
 /// `docs/CONFIGURATION.md`.
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize)]
 pub struct CollectionSettings {
     /// How often to collect local telemetry, in seconds. Drives the
     /// agent's main sampling loop cadence (see `agent_client::run_monitor_loop`).
+    ///
+    /// For backward compatibility with configs written before `[collection]`
+    /// existed, this value is only used when explicitly present in the
+    /// parsed config file; see [`CollectionSettings::effective_interval_secs`].
     #[serde(default = "default_collection_interval_secs")]
     pub collection_interval_secs: u64,
     /// Event batch size for SIEM forwarding.
     #[serde(default = "default_max_events_per_batch")]
     pub max_events_per_batch: usize,
+    /// True when `collection_interval_secs` was explicitly present in the
+    /// parsed config file, as opposed to filled in from its default. Not
+    /// serialized.
+    #[serde(skip)]
+    pub collection_interval_secs_explicit: bool,
 }
 
 fn default_collection_interval_secs() -> u64 {
@@ -296,11 +365,69 @@ fn default_max_events_per_batch() -> usize {
     500
 }
 
+impl<'de> Deserialize<'de> for CollectionSettings {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: serde::Deserializer<'de>,
+    {
+        #[derive(Deserialize)]
+        #[serde(rename_all = "snake_case")]
+        struct Raw {
+            #[serde(default)]
+            collection_interval_secs: Option<u64>,
+            #[serde(default = "default_max_events_per_batch")]
+            max_events_per_batch: usize,
+        }
+        let raw = Raw::deserialize(deserializer)?;
+        Ok(CollectionSettings {
+            collection_interval_secs: raw
+                .collection_interval_secs
+                .unwrap_or_else(default_collection_interval_secs),
+            max_events_per_batch: raw.max_events_per_batch,
+            collection_interval_secs_explicit: raw.collection_interval_secs.is_some(),
+        })
+    }
+}
+
+/// One-time guard so the "collection vs. monitor interval both set" note is
+/// logged at most once per process, regardless of how many times config is
+/// (re)loaded.
+static COLLECTION_INTERVAL_MISMATCH_LOGGED: std::sync::Once = std::sync::Once::new();
+
+impl CollectionSettings {
+    /// Effective local-telemetry sampling interval, in seconds.
+    ///
+    /// When `collection_interval_secs` was explicitly set in the config
+    /// file, it is used (and wins over `monitor.interval_secs` when both are
+    /// set and differ, logging a one-time deprecation note). Otherwise, for
+    /// backward compatibility with configs that predate `[collection]` and
+    /// only set `[monitor] interval_secs`, the monitor value is used.
+    pub fn effective_interval_secs(&self, monitor: &MonitorSettings) -> u64 {
+        if self.collection_interval_secs_explicit {
+            if monitor.interval_secs_explicit
+                && monitor.interval_secs != self.collection_interval_secs
+            {
+                COLLECTION_INTERVAL_MISMATCH_LOGGED.call_once(|| {
+                    log::warn!(
+                        "config: both [collection] collection_interval_secs ({}) and [monitor] interval_secs ({}) are set and differ; collection_interval_secs wins. Remove monitor.interval_secs or align the two to silence this note.",
+                        self.collection_interval_secs,
+                        monitor.interval_secs
+                    );
+                });
+            }
+            self.collection_interval_secs
+        } else {
+            monitor.interval_secs
+        }
+    }
+}
+
 impl Default for CollectionSettings {
     fn default() -> Self {
         Self {
             collection_interval_secs: default_collection_interval_secs(),
             max_events_per_batch: default_max_events_per_batch(),
+            collection_interval_secs_explicit: false,
         }
     }
 }
@@ -924,6 +1051,12 @@ impl Default for AgentSettings {
 impl Config {
     pub fn normalize(&mut self) {
         self.monitor.scope.normalize();
+    }
+
+    /// Effective local-telemetry sampling interval, in seconds. See
+    /// [`CollectionSettings::effective_interval_secs`].
+    pub fn effective_collection_interval_secs(&self) -> u64 {
+        self.collection.effective_interval_secs(&self.monitor)
     }
 
     pub fn write_default_toml(path: &Path) -> Result<(), String> {
@@ -1627,5 +1760,106 @@ scheduled_tasks = false
         // Exercises the "backend not available in this build" logging
         // path; nothing to assert beyond "doesn't panic".
         super::CollectorsSettings::default().log_backend_status();
+    }
+
+    /// Prepends the mandatory `[detector]`/`[policy]`/`[output]` sections
+    /// (which have no serde defaults) to a snippet that only sets
+    /// `[monitor]` and/or `[collection]`, so the combination parses as a
+    /// full `Config` while leaving those two sections exactly as written —
+    /// unlike overlaying onto `Config::default()`'s serialized TOML, which
+    /// would make every section "present" and defeat the explicit-vs-default
+    /// tracking these tests are checking.
+    fn config_from_partial_toml(snippet: &str) -> Config {
+        let prefix = r#"
+[detector]
+warmup_samples = 4
+smoothing = 0.22
+learn_threshold = 2.5
+
+[policy]
+critical_score = 5.2
+severe_score = 3.0
+elevated_score = 2.8
+critical_integrity_drift = 0.45
+low_battery_threshold = 20.0
+
+[output]
+audit_path = "var/last-run.audit.log"
+report_path = "var/last-run.report.json"
+checkpoint_interval = 5
+"#;
+        toml::from_str(&format!("{prefix}\n{snippet}")).unwrap()
+    }
+
+    #[test]
+    fn effective_interval_falls_back_to_monitor_when_only_monitor_set() {
+        // A config written before `[collection]` existed: only
+        // `[monitor] interval_secs` is set. The agent must keep using that
+        // cadence rather than silently switching to the collection default.
+        let config = config_from_partial_toml(
+            r#"
+[monitor]
+interval_secs = 7
+alert_threshold = 3.5
+alert_log = "var/alerts.jsonl"
+dry_run = false
+duration_secs = 0
+syslog = false
+cef = false
+watch_paths = []
+"#,
+        );
+        assert!(config.monitor.interval_secs_explicit);
+        assert!(!config.collection.collection_interval_secs_explicit);
+        assert_eq!(config.effective_collection_interval_secs(), 7);
+    }
+
+    #[test]
+    fn effective_interval_uses_collection_when_only_collection_set() {
+        let config = config_from_partial_toml(
+            r#"
+[collection]
+collection_interval_secs = 20
+"#,
+        );
+        assert!(!config.monitor.interval_secs_explicit);
+        assert!(config.collection.collection_interval_secs_explicit);
+        assert_eq!(config.effective_collection_interval_secs(), 20);
+    }
+
+    #[test]
+    fn effective_interval_prefers_collection_when_both_set_and_differ() {
+        let config = config_from_partial_toml(
+            r#"
+[monitor]
+interval_secs = 5
+alert_threshold = 3.5
+alert_log = "var/alerts.jsonl"
+dry_run = false
+duration_secs = 0
+syslog = false
+cef = false
+watch_paths = []
+
+[collection]
+collection_interval_secs = 15
+"#,
+        );
+        assert!(config.monitor.interval_secs_explicit);
+        assert!(config.collection.collection_interval_secs_explicit);
+        // collection wins even though both were explicitly set.
+        assert_eq!(config.effective_collection_interval_secs(), 15);
+    }
+
+    #[test]
+    fn effective_interval_defaults_when_neither_set() {
+        let config = Config::default();
+        assert!(!config.monitor.interval_secs_explicit);
+        assert!(!config.collection.collection_interval_secs_explicit);
+        // Neither explicitly configured: fall back to the historical
+        // monitor default so brand-new default configs keep the
+        // long-standing 5s cadence rather than silently jumping to the
+        // newer collection default.
+        assert_eq!(config.effective_collection_interval_secs(), 5);
     }
 }
