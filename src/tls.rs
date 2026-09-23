@@ -319,7 +319,7 @@ mod tests {
             min_version = "1.3"
             require_client_cert = true
         "#;
-        let value: toml::Value = toml_str.parse().unwrap();
+        let value: toml::Value = toml::from_str(toml_str).unwrap();
         let config = parse_tls_config(&value).unwrap();
         assert_eq!(config.cert_path, PathBuf::from("certs/server.pem"));
         assert_eq!(config.key_path, PathBuf::from("certs/server-key.pem"));
@@ -333,7 +333,7 @@ mod tests {
             cert = "cert.pem"
             key = "key.pem"
         "#;
-        let value: toml::Value = toml_str.parse().unwrap();
+        let value: toml::Value = toml::from_str(toml_str).unwrap();
         let config = parse_tls_config(&value).unwrap();
         assert_eq!(config.min_version, TlsVersion::Tls12);
         assert!(!config.require_client_cert);
@@ -344,7 +344,7 @@ mod tests {
         let toml_str = r#"
             key = "key.pem"
         "#;
-        let value: toml::Value = toml_str.parse().unwrap();
+        let value: toml::Value = toml::from_str(toml_str).unwrap();
         assert!(parse_tls_config(&value).is_err());
     }
 
