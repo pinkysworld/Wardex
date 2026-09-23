@@ -365,13 +365,24 @@ fn ticket_sync_retry_after_failure_creates_a_real_ticket() {
         if let Ok((mut stream, _)) = listener.accept() {
             let mut buf = [0u8; 8192];
             let mut received = Vec::new();
+            // Read the JSON body too: closing with unread data makes
+            // macOS/BSD reset the connection before the client sees 201.
             loop {
                 let n = stream.read(&mut buf).unwrap_or(0);
                 if n == 0 {
                     break;
                 }
                 received.extend_from_slice(&buf[..n]);
-                if received.windows(4).any(|w| w == b"\r\n\r\n") {
+                let Some(header_end) = received.windows(4).position(|w| w == b"\r\n\r\n") else {
+                    continue;
+                };
+                let headers = String::from_utf8_lossy(&received[..header_end]).to_ascii_lowercase();
+                let content_length = headers
+                    .lines()
+                    .find_map(|line| line.strip_prefix("content-length:"))
+                    .and_then(|value| value.trim().parse::<usize>().ok())
+                    .unwrap_or(0);
+                if received.len() >= header_end + 4 + content_length {
                     break;
                 }
             }
