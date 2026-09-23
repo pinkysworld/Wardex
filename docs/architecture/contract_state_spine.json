@@ -491,6 +491,8 @@
     "/api/scan/buffer/v2",
     "/api/scan/hash",
     "/api/search",
+    "/api/search/rebuild",
+    "/api/search/status",
     "/api/secrets/config",
     "/api/secrets/status",
     "/api/secrets/validate",
