@@ -1,6 +1,7 @@
 import * as api from '../../api.js';
 import { JsonDetails, SummaryGrid } from '../operator.jsx';
 import { NumberInput, TextInput, ToggleSwitch } from './components.jsx';
+import { IconAlertTriangle, IconRefresh } from '../icons.jsx';
 
 export function ConfigTab({
   config,
@@ -33,7 +34,8 @@ export function ConfigTab({
         <span className="card-title">Configuration</span>
         <div className="btn-group">
           <button className="btn btn-sm" onClick={rConfig}>
-            ↻ Reload
+            <IconRefresh size={14} />
+            Reload
           </button>
           <button
             className="btn btn-sm"
@@ -120,8 +122,17 @@ export function ConfigTab({
               }}
             />
             {jsonError && (
-              <div style={{ fontSize: 11, color: 'var(--danger, #ef4444)', marginTop: 4 }}>
-                ⚠ {jsonError}
+              <div
+                style={{
+                  fontSize: 11,
+                  color: 'var(--danger, #ef4444)',
+                  marginTop: 4,
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: 4,
+                }}
+              >
+                <IconAlertTriangle size={13} aria-hidden="true" /> {jsonError}
               </div>
             )}
             <div className="btn-group" style={{ marginTop: 8 }}>

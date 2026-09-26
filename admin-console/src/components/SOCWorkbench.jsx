@@ -18,6 +18,14 @@ import {
 
 import ErrorBoundary from './ErrorBoundary.jsx';
 import PlaybookEditor from './PlaybookEditor.jsx';
+import {
+  IconCheck,
+  IconChevronDown,
+  IconChevronRight,
+  IconCircle,
+  IconClose,
+  IconRefresh,
+} from './icons.jsx';
 
 // ── Tab Groups ─────────────────────────────────────────────────
 const TAB_GROUPS = [
@@ -1781,7 +1789,12 @@ export default function SOCWorkbench() {
               }}
               title={`${collapsedGroups[g.label] ? 'Expand' : 'Collapse'} ${g.label}`}
             >
-              {collapsedGroups[g.label] ? '▸' : '▾'} {g.label}
+              {collapsedGroups[g.label] ? (
+                <IconChevronRight size={11} />
+              ) : (
+                <IconChevronDown size={11} />
+              )}{' '}
+              {g.label}
             </button>
             {!collapsedGroups[g.label] &&
               g.tabs.map((t) => (
@@ -2622,7 +2635,8 @@ export default function SOCWorkbench() {
             <span className="card-title">Incidents ({incArr.length})</span>
             <div className="btn-group">
               <button className="btn btn-sm" onClick={rInc}>
-                ↻ Refresh
+                <IconRefresh size={14} />
+                Refresh
               </button>
               <button
                 className="btn btn-sm btn-primary"
@@ -2729,7 +2743,7 @@ export default function SOCWorkbench() {
                       setIncStoryline(null);
                     }}
                   >
-                    ✕ Close
+                    <IconClose size={14} /> Close
                   </button>
                 </div>
               </div>
@@ -3822,7 +3836,8 @@ export default function SOCWorkbench() {
                   : 'Live idle'}
               </span>
               <button className="btn btn-sm" onClick={rQueue}>
-                ↻ Refresh
+                <IconRefresh size={14} />
+                Refresh
               </button>
             </div>
           </div>
@@ -4048,7 +4063,8 @@ export default function SOCWorkbench() {
                 </div>
               </div>
               <button className="btn btn-sm" onClick={reloadResponseData}>
-                ↻ Refresh
+                <IconRefresh size={14} />
+                Refresh
               </button>
             </div>
             {hasResponseContext && (
@@ -4370,14 +4386,24 @@ export default function SOCWorkbench() {
                                   padding: '4px 0',
                                 }}
                               >
-                                <span style={{ width: 18, textAlign: 'center' }}>
-                                  {step.status === 'completed' || step.status === 'done'
-                                    ? '✓'
-                                    : step.status === 'failed' || step.status === 'error'
-                                      ? '✗'
-                                      : step.status === 'running'
-                                        ? '⟳'
-                                        : '○'}
+                                <span
+                                  style={{
+                                    width: 18,
+                                    textAlign: 'center',
+                                    display: 'inline-flex',
+                                    justifyContent: 'center',
+                                  }}
+                                  aria-hidden="true"
+                                >
+                                  {step.status === 'completed' || step.status === 'done' ? (
+                                    <IconCheck size={13} />
+                                  ) : step.status === 'failed' || step.status === 'error' ? (
+                                    <IconClose size={13} />
+                                  ) : step.status === 'running' ? (
+                                    <IconRefresh size={13} />
+                                  ) : (
+                                    <IconCircle size={13} />
+                                  )}
                                 </span>
                                 <span
                                   style={{
@@ -4455,7 +4481,8 @@ export default function SOCWorkbench() {
             <div className="card-header">
               <span className="card-title">Active Escalations</span>
               <button className="btn btn-sm" onClick={rEscActive}>
-                ↻ Refresh
+                <IconRefresh size={14} />
+                Refresh
               </button>
             </div>
             {(() => {
@@ -4525,7 +4552,8 @@ export default function SOCWorkbench() {
               <span className="card-title">Escalation Policies</span>
               <div className="btn-group">
                 <button className="btn btn-sm" onClick={rEsc}>
-                  ↻ Refresh
+                  <IconRefresh size={14} />
+                  Refresh
                 </button>
                 <button
                   className="btn btn-sm btn-primary"
@@ -4716,7 +4744,8 @@ export default function SOCWorkbench() {
                     Export
                   </button>
                   <button className="btn btn-sm" onClick={() => reloadProcessTreeData()}>
-                    ↻ Refresh
+                    <IconRefresh size={14} />
+                    Refresh
                   </button>
                 </div>
               </div>
@@ -4792,7 +4821,8 @@ export default function SOCWorkbench() {
                 <span className="card-title">Live Processes ({liveProcs?.count ?? '—'})</span>
                 <div className="btn-group">
                   <button className="btn btn-sm" onClick={reloadProcessTreeData}>
-                    ↻ Refresh
+                    <IconRefresh size={14} />
+                    Refresh
                   </button>
                   <button
                     className="btn btn-sm"
@@ -4953,7 +4983,8 @@ export default function SOCWorkbench() {
           <div className="card-header">
             <span className="card-title">RBAC Users</span>
             <button className="btn btn-sm" onClick={rRbac}>
-              ↻ Refresh
+              <IconRefresh size={14} />
+              Refresh
             </button>
           </div>
           {rbacArr.length === 0 ? (
@@ -5008,7 +5039,8 @@ export default function SOCWorkbench() {
             <div className="card-header">
               <span className="card-title">Investigation Planner</span>
               <button className="btn btn-sm" onClick={rInv}>
-                ↻ Refresh
+                <IconRefresh size={14} />
+                Refresh
               </button>
             </div>
             {investigationContext ? (
@@ -5810,7 +5842,8 @@ export default function SOCWorkbench() {
           <div className="card-header">
             <span className="card-title">Detection Efficacy</span>
             <button className="btn btn-sm" onClick={rEfficacy}>
-              ↻ Refresh
+              <IconRefresh size={14} />
+              Refresh
             </button>
           </div>
           {efficacyData ? (
@@ -5856,7 +5889,8 @@ export default function SOCWorkbench() {
           <div className="card-header">
             <span className="card-title">Host Timeline</span>
             <button className="btn btn-sm" onClick={rTimeline}>
-              ↻ Refresh
+              <IconRefresh size={14} />
+              Refresh
             </button>
           </div>
           {(() => {
