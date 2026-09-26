@@ -3,6 +3,7 @@ import * as api from '../api.js';
 import { useRole } from '../hooks.jsx';
 import { safeStorageJsonGet, safeStorageJsonSet } from '../safeStorage.js';
 import { SEARCH_COMMANDS } from './workflowPivots.js';
+import { IconClose, IconSearch } from './icons.jsx';
 
 const SAVED_KEY = 'wardex_saved_searches';
 function loadSaved() {
@@ -371,7 +372,7 @@ function SearchPaletteDialog({ onClose, onNavigate, saved, setSaved, currentPath
       >
         <div className="search-palette-input-wrap">
           <span className="search-palette-icon" aria-hidden="true">
-            ⌕
+            <IconSearch size={16} />
           </span>
           <input
             ref={inputRef}
@@ -454,8 +455,9 @@ function SearchPaletteDialog({ onClose, onNavigate, saved, setSaved, currentPath
                     setSaved(next);
                     persistSaved(next);
                   }}
+                  aria-label={`Remove saved search: ${s}`}
                 >
-                  ✕
+                  <IconClose size={12} />
                 </button>
               </div>
             ))}

@@ -1320,9 +1320,11 @@ export default function App() {
               </form>
             ) : (
               <span className="auth-badge" aria-label="Connected to Wardex">
-                <span className="auth-badge-full">● Connected</span>
+                <span className="auth-badge-full">
+                  <span className="dot dot-green" aria-hidden="true" /> Connected
+                </span>
                 <span className="auth-badge-compact" aria-hidden="true">
-                  ● On
+                  <span className="dot dot-green" /> On
                 </span>
               </span>
             )}

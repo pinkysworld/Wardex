@@ -1,5 +1,6 @@
 import { useEffect, useRef } from 'react';
 import { formatLabel, formatValue } from './operatorUtils.js';
+import { IconAlertTriangle } from './icons.jsx';
 
 function previewObject(value) {
   if (!value || typeof value !== 'object' || Array.isArray(value)) return null;
@@ -276,7 +277,7 @@ export function WorkspaceErrorState({
       }}
     >
       <div aria-hidden="true" style={{ fontSize: 28 }}>
-        ⚠
+        <IconAlertTriangle size={28} />
       </div>
       <div style={{ fontWeight: 700, fontSize: 14, color: 'var(--err)' }}>{title}</div>
       <div className="hint" style={{ maxWidth: 480 }}>

@@ -3,6 +3,7 @@ import { useSearchParams } from 'react-router-dom';
 import { useApi } from '../hooks.jsx';
 import * as api from '../api.js';
 import WorkflowGuidance from './WorkflowGuidance.jsx';
+import { IconClose } from './icons.jsx';
 import { buildHref } from './workflowPivots.js';
 import { formatDateTime, formatRelativeTime } from './operatorUtils.js';
 
@@ -697,7 +698,7 @@ export default function AttackGraph() {
                 onClick={() => updateParams({ node: null })}
                 aria-label="Close node detail"
               >
-                ✕
+                <IconClose size={14} />
               </button>
             </div>
             <div style={{ display: 'grid', gap: 8, fontSize: 13 }}>

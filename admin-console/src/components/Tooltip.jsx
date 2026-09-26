@@ -1,4 +1,5 @@
 import { cloneElement, isValidElement, useId, useState } from 'react';
+import { IconInfo } from './icons.jsx';
 
 function composeHandlers(...handlers) {
   return (event) => {
@@ -46,7 +47,7 @@ export default function Tooltip({ text, children }) {
         color: 'inherit',
       }}
     >
-      ⓘ
+      <IconInfo size={12} />
     </button>
   );
 

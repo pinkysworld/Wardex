@@ -27,7 +27,14 @@ import { buildHref } from './workflowPivots.js';
 import { safeStorageGet, safeStorageJsonGet, safeStorageJsonSet } from '../safeStorage.js';
 import { MALWARE_SCAN_PRESETS } from './malwareScanningPresets.js';
 import PageHeader from './PageHeader.jsx';
-import { IconLayoutReset, IconMonitorPlay, IconRefresh } from './icons.jsx';
+import {
+  IconAlertTriangle,
+  IconCheck,
+  IconClose,
+  IconLayoutReset,
+  IconMonitorPlay,
+  IconRefresh,
+} from './icons.jsx';
 
 function Metric({ label, value, sub, accent, onClick, tip }) {
   return (
@@ -1090,7 +1097,7 @@ export default function Dashboard() {
                       setNocMode(false);
                     }}
                   >
-                    ✕ Exit
+                    <IconClose size={14} /> Exit
                   </button>
                 </div>
               </div>
@@ -1098,7 +1105,15 @@ export default function Dashboard() {
                 <div className="card-grid" style={{ fontSize: 18 }}>
                   <Metric
                     label="System Status"
-                    value={hp?.status === 'ok' ? '✓ Healthy' : hp?.status || '—'}
+                    value={
+                      hp?.status === 'ok' ? (
+                        <>
+                          <IconCheck size={16} /> Healthy
+                        </>
+                      ) : (
+                        hp?.status || '—'
+                      )
+                    }
                     sub={`Uptime: ${st?.uptime || '—'}`}
                     accent
                   />
@@ -1139,7 +1154,15 @@ export default function Dashboard() {
               <div className="card-grid">
                 <Metric
                   label="System Status"
-                  value={hp?.status === 'ok' ? '✓ Healthy' : hp?.status || '—'}
+                  value={
+                    hp?.status === 'ok' ? (
+                      <>
+                        <IconCheck size={16} /> Healthy
+                      </>
+                    ) : (
+                      hp?.status || '—'
+                    )
+                  }
                   sub={`Uptime: ${st?.uptime || '—'}`}
                   accent
                 />
@@ -1592,9 +1615,15 @@ export default function Dashboard() {
                   <span
                     className={`badge ${procAnalysis.status === 'clean' ? 'badge-ok' : procAnalysis.status === 'critical' ? 'badge-err' : 'badge-warn'}`}
                   >
-                    {procAnalysis.status === 'clean'
-                      ? '✓ Clean'
-                      : `⚠ ${procAnalysis.total || 0} finding(s)`}
+                    {procAnalysis.status === 'clean' ? (
+                      <>
+                        <IconCheck size={12} /> Clean
+                      </>
+                    ) : (
+                      <>
+                        <IconAlertTriangle size={12} /> {procAnalysis.total || 0} finding(s)
+                      </>
+                    )}
                   </span>
                 </div>
                 {procAnalysis.findings?.length > 0 ? (
@@ -1682,7 +1711,15 @@ export default function Dashboard() {
                       <div key={k} style={{ textAlign: 'center' }}>
                         <div className="metric-label">{k.replace(/_/g, ' ')}</div>
                         <div style={{ fontSize: 18, fontWeight: 600 }}>
-                          {typeof v === 'boolean' ? (v ? '✓' : '✗') : v}
+                          {typeof v === 'boolean' ? (
+                            v ? (
+                              <IconCheck size={16} />
+                            ) : (
+                              <IconClose size={16} />
+                            )
+                          ) : (
+                            v
+                          )}
                         </div>
                       </div>
                     ))}

@@ -1,16 +1,26 @@
 import { useState } from 'react';
 import { useApi, useDraftPersistence, useToast } from '../hooks.jsx';
 import * as api from '../api.js';
+import {
+  IconBell,
+  IconBolt,
+  IconChart,
+  IconClock,
+  IconClose,
+  IconPlay,
+  IconSearch,
+  IconSiren,
+} from './icons.jsx';
 
 const PLAYBOOK_EDITOR_DRAFT_TTL_MS = 7 * 24 * 60 * 60 * 1000;
 
 const STEP_TYPES = [
-  { value: 'CheckThreshold', label: 'Check Threshold', icon: '📊' },
-  { value: 'MatchPattern', label: 'Match Pattern', icon: '🔍' },
-  { value: 'RunAction', label: 'Run Action', icon: '⚡' },
-  { value: 'Notify', label: 'Notify', icon: '🔔' },
-  { value: 'Escalate', label: 'Escalate', icon: '🚨' },
-  { value: 'Wait', label: 'Wait', icon: '⏱' },
+  { value: 'CheckThreshold', label: 'Check Threshold', Icon: IconChart },
+  { value: 'MatchPattern', label: 'Match Pattern', Icon: IconSearch },
+  { value: 'RunAction', label: 'Run Action', Icon: IconBolt },
+  { value: 'Notify', label: 'Notify', Icon: IconBell },
+  { value: 'Escalate', label: 'Escalate', Icon: IconSiren },
+  { value: 'Wait', label: 'Wait', Icon: IconClock },
 ];
 
 function StepCard({ step, index, onRemove, onUpdate }) {
@@ -28,7 +38,9 @@ function StepCard({ step, index, onRemove, onUpdate }) {
         marginBottom: 8,
       }}
     >
-      <span style={{ fontSize: 20 }}>{typeInfo.icon}</span>
+      <span style={{ fontSize: 20 }} aria-hidden="true">
+        <typeInfo.Icon size={20} />
+      </span>
       <div style={{ flex: 1 }}>
         <div style={{ display: 'flex', gap: 8, alignItems: 'center', marginBottom: 4 }}>
           <select
@@ -57,9 +69,10 @@ function StepCard({ step, index, onRemove, onUpdate }) {
         className="btn btn-ghost btn-sm"
         onClick={onRemove}
         title="Remove step"
+        aria-label="Remove step"
         style={{ color: 'var(--danger)', fontSize: 16 }}
       >
-        ×
+        <IconClose size={14} />
       </button>
     </div>
   );
@@ -215,7 +228,13 @@ export default function PlaybookEditor() {
               + Add Step
             </button>
             <button className="btn btn-primary" onClick={runPlaybook} disabled={running}>
-              {running ? 'Running…' : '▶ Run Playbook'}
+              {running ? (
+                'Running…'
+              ) : (
+                <>
+                  <IconPlay size={14} /> Run Playbook
+                </>
+              )}
             </button>
           </div>
           {recovery && (

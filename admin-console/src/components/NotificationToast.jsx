@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
 import * as api from '../api.js';
 import { safeStorageGet, safeStorageSet } from '../safeStorage.js';
+import { IconBell, IconBellOff, IconClose } from './icons.jsx';
 
 const POLL_INTERVAL = 30_000;
 const MAX_TOASTS = 8;
@@ -135,6 +136,7 @@ export default function NotificationToast({ active = false }) {
         <button
           onClick={toggleSound}
           title={soundEnabled ? 'Mute notifications' : 'Unmute notifications'}
+          aria-label={soundEnabled ? 'Mute notifications' : 'Unmute notifications'}
           style={{
             background: 'none',
             border: 'none',
@@ -144,7 +146,7 @@ export default function NotificationToast({ active = false }) {
             opacity: 0.6,
           }}
         >
-          {soundEnabled ? '🔔' : '🔕'}
+          {soundEnabled ? <IconBell size={15} /> : <IconBellOff size={15} />}
         </button>
       </div>
       {items.map((n) => (
@@ -179,7 +181,7 @@ export default function NotificationToast({ active = false }) {
             }}
             aria-label="Dismiss"
           >
-            ×
+            <IconClose size={14} />
           </button>
         </div>
       ))}
