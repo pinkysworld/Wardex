@@ -817,10 +817,11 @@ fn spawn_docker_watch_loop(
     });
 }
 
-/// Best-effort in-cluster Kubernetes Pod watch loop. See
-/// `container_runtime::KubeClient::watch_pods` for the known TLS-trust
-/// limitation; this loop logs a warning and backs off rather than spinning
-/// when the API server is unreachable or untrusted.
+/// Best-effort in-cluster Kubernetes Pod watch loop. TLS against the API
+/// server trusts only the mounted serviceaccount CA (see
+/// `container_runtime::KubeClient`); this loop logs a warning and backs off
+/// rather than spinning when the API server is unreachable, when the `tls`
+/// cargo feature isn't compiled in, or on any other watch failure.
 fn spawn_kubernetes_watch_loop(
     state: &Arc<Mutex<AppState>>,
     config: crate::container_runtime::ContainerRuntimeConfig,
@@ -878,9 +879,7 @@ fn spawn_kubernetes_watch_loop(
                                     }
                                 }
                             }
-                            Err(e) => log::warn!(
-                                "[container] kubernetes watch unavailable (known TLS-trust limitation, see docs/CONFIGURATION.md): {e}"
-                            ),
+                            Err(e) => log::warn!("[container] kubernetes watch unavailable: {e}"),
                         }
                     }
                 }

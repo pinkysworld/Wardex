@@ -27,7 +27,7 @@ Work merged since `v1.0.30` and not yet released:
 - **Threat-intel enrichment**: VirusTotal and AbuseIPDB clients for hash/IP/domain/URL lookups.
 - **Bidirectional ticketing**: Jira and ServiceNow REST clients with idempotent create-or-update sync.
 - **OTLP export, SMTP STARTTLS, and Okta polling** integrations.
-- **Live Docker/Podman and Kubernetes container event sources**, including a best-effort in-cluster Kubernetes watch (documented as TLS-trust-limited pending a custom CA anchor).
+- **Live Docker/Podman and Kubernetes container event sources**, including an in-cluster Kubernetes Pod watch that trusts the mounted serviceaccount CA over TLS.
 - **Previously documented-but-missing config keys implemented**, including `[collection]`, `[detection]`, `[collectors]`, `[relay]`, and `[attestation]`.
 - **Dependency and security updates**: `rustls` bumped for `RUSTSEC-2026-0285`, plus major-version upgrades to `rand`, `ed25519-dalek`, `aes-gcm`, and `toml`.
 - **Admin console redesign**: topbar/navigation chrome cleanup and a shared icon set.

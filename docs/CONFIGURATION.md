@@ -222,12 +222,12 @@ kubernetes_enabled = false
 kubernetes_namespaces = []       # empty = all namespaces
 ```
 
-Kubernetes support is best-effort: the in-cluster API server presents a TLS
-certificate signed by the cluster's own CA, and this build's HTTP client does
-not currently trust a custom root CA, so live Pod watching against a real
-cluster will fail TLS verification. The watch-stream parsing and detection
-mapping are implemented and unit-tested against fixtures so the feature can be
-enabled as soon as a custom trust anchor is wired through.
+Kubernetes support connects to the in-cluster API server over TLS, trusting
+only the mounted serviceaccount CA
+(`/var/run/secrets/kubernetes.io/serviceaccount/ca.crt`) — never the public
+web PKI roots, since the API server's certificate is signed by the cluster's
+own private CA. This requires the `tls` cargo feature (on by default); a build
+without it fails clearly instead of skipping certificate verification.
 
 ### `[relay]`
 

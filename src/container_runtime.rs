@@ -11,15 +11,19 @@
 //! (e.g. bollard) is required. `ureq` does not support Unix sockets in
 //! the version this crate pins, so it is unused here.
 //!
-//! Kubernetes support is best-effort: the in-cluster API server serves
-//! TLS with the cluster's own CA, which is not in the process's default
-//! trust store. `ureq` (as configured in this crate, without a direct
-//! `rustls` dependency for building a custom `RootCertStore`) cannot be
-//! told to trust that CA, so [`KubeClient::watch_pods`] will fail TLS
-//! verification against a real API server. The request/response types
-//! and event-mapping logic are implemented and unit-tested against
-//! fixtures so the feature is ready to enable once a custom trust
-//! anchor can be wired through (tracked as a known limitation below).
+//! Kubernetes support connects to the in-cluster API server over TLS,
+//! trusting only the mounted serviceaccount CA
+//! (`/var/run/secrets/kubernetes.io/serviceaccount/ca.crt`) — never the
+//! public web PKI roots, since a cluster's API server certificate is
+//! issued by the cluster's own private CA. This requires the crate's
+//! `tls` cargo feature (on by default), which pulls in a direct `rustls`
+//! dependency used to build a `ureq::Agent` with a custom
+//! `rustls::ClientConfig` (see `crate::tls_client::build_tls_client_config`,
+//! shared with the SMTP notifier's TLS setup). Without the `tls` feature,
+//! [`KubeClient::watch_pods`] fails clearly instead of silently skipping
+//! certificate verification. The request/response types and
+//! event-mapping logic are additionally unit-tested against fixtures
+//! independent of the live TLS path.
 
 use crate::container::{ContainerEvent, ContainerEventKind};
 use serde::{Deserialize, Serialize};
@@ -712,12 +716,23 @@ pub fn docker_event_to_container_event(
 const KUBE_SA_DIR: &str = "/var/run/secrets/kubernetes.io/serviceaccount";
 
 /// In-cluster Kubernetes API client.
+///
+/// Without the `tls` cargo feature, `watch_pods` fails immediately without
+/// touching any of these fields (there is no TLS stack available to build
+/// a `ureq::Agent` from them), so they are otherwise-unread in that build
+/// configuration — expected, not dead code.
 #[derive(Debug)]
 pub struct KubeClient {
+    #[cfg_attr(not(feature = "tls"), allow(dead_code))]
     api_server: String,
+    #[cfg_attr(not(feature = "tls"), allow(dead_code))]
     token: String,
-    #[allow(dead_code)]
-    ca_path: String,
+    /// PEM-encoded serviceaccount CA certificate. This is the ONLY
+    /// certificate `watch_pods` trusts — never the public web PKI roots —
+    /// since the API server's certificate is issued by the cluster's own
+    /// private CA.
+    #[cfg_attr(not(feature = "tls"), allow(dead_code))]
+    ca_cert_pem: String,
 }
 
 impl KubeClient {
@@ -735,9 +750,8 @@ impl KubeClient {
             .map_err(|e| format!("read {token_path}: {e}"))?
             .trim()
             .to_string();
-        if !std::path::Path::new(&ca_path).exists() {
-            return Err(format!("missing serviceaccount CA at {ca_path}"));
-        }
+        let ca_cert_pem =
+            std::fs::read_to_string(&ca_path).map_err(|e| format!("read {ca_path}: {e}"))?;
         let host = if host.contains(':') {
             format!("[{host}]")
         } else {
@@ -746,21 +760,41 @@ impl KubeClient {
         Ok(Self {
             api_server: format!("https://{host}:{port}"),
             token,
-            ca_path,
+            ca_cert_pem,
         })
+    }
+
+    /// Test-only constructor bypassing the in-pod environment/file
+    /// detection in [`KubeClient::in_cluster`], so tests can point the
+    /// client at a local fake API server with a known CA.
+    #[cfg(all(test, unix))]
+    fn for_test(api_server: String, token: String, ca_cert_pem: String) -> Self {
+        Self {
+            api_server,
+            token,
+            ca_cert_pem,
+        }
+    }
+
+    /// Build a `ureq::Agent` trusting ONLY `self.ca_cert_pem` — not the
+    /// public web PKI roots — for talking to the in-cluster API server.
+    /// Requires the crate's `tls` feature, which is what pulls in the
+    /// direct `rustls` dependency this needs.
+    #[cfg(feature = "tls")]
+    fn build_agent(&self) -> Result<ureq::Agent, String> {
+        let tls_config =
+            crate::tls_client::build_tls_client_config(false, Some(&self.ca_cert_pem))?;
+        Ok(ureq::AgentBuilder::new().tls_config(tls_config).build())
     }
 
     /// Watch Pods across the configured namespaces (or cluster-wide when
     /// empty), starting from `resource_version` (empty = "now").
     ///
-    /// KNOWN LIMITATION: this crate's `ureq` is used without a direct
-    /// `rustls` dependency to build a `RootCertStore` containing the
-    /// cluster's serviceaccount CA, so the TLS handshake against a real
-    /// in-cluster API server (which serves that CA, not one in the
-    /// public trust store) will fail here with a certificate error. The
-    /// request is still issued (and this failure mode is what callers
-    /// should expect and log) so that wiring in a custom trust anchor
-    /// later is a localized change to this one method.
+    /// TLS handshakes against the in-cluster API server trust ONLY the
+    /// serviceaccount CA read by [`KubeClient::in_cluster`] — requires the
+    /// crate's `tls` feature (on by default); without it this fails
+    /// clearly rather than silently skipping certificate verification.
+    #[cfg(feature = "tls")]
     pub fn watch_pods(
         &self,
         namespace: Option<&str>,
@@ -770,7 +804,8 @@ impl KubeClient {
             Some(ns) => format!("{}/api/v1/namespaces/{}/pods", self.api_server, ns),
             None => format!("{}/api/v1/pods", self.api_server),
         };
-        let mut req = ureq::get(&path).query("watch", "1");
+        let agent = self.build_agent()?;
+        let mut req = agent.get(&path).query("watch", "1");
         if !resource_version.is_empty() {
             req = req.query("resourceVersion", resource_version);
         }
@@ -781,6 +816,23 @@ impl KubeClient {
             .map_err(|e| format!("kubernetes watch request failed: {e}"))?;
         resp.into_string()
             .map_err(|e| format!("read kubernetes watch response: {e}"))
+    }
+
+    /// Without the `tls` cargo feature there is no TLS stack available to
+    /// build a `ureq::Agent` that trusts the cluster's serviceaccount CA,
+    /// so this fails clearly instead of attempting (and failing) a plain
+    /// HTTPS request, or silently skipping certificate verification.
+    #[cfg(not(feature = "tls"))]
+    pub fn watch_pods(
+        &self,
+        _namespace: Option<&str>,
+        _resource_version: &str,
+    ) -> Result<String, String> {
+        Err(
+            "kubernetes watch requires this build's \"tls\" cargo feature (the in-cluster API \
+             server is TLS-only, trusted via the serviceaccount CA)"
+                .to_string(),
+        )
     }
 }
 
@@ -1360,5 +1412,125 @@ mod tests {
         // Best effort: a real daemon might reject us on permissions; that
         // is not a test failure, just an environment limitation.
         let _ = client.ping();
+    }
+
+    // ── Kubernetes in-cluster TLS trust ─────────────────────────────
+    //
+    // A local TLS listener stands in for the in-cluster API server: it
+    // presents a self-signed certificate (used directly as its own trust
+    // anchor, matching the pattern in `notifications.rs`'s SMTP STARTTLS
+    // tests) and replies with one canned `WatchEvent` line to any request.
+    // `KubeClient::watch_pods` is exercised end to end: trusting that exact
+    // certificate must succeed, and trusting a different one must fail
+    // closed rather than falling back to the public web PKI roots.
+
+    #[cfg(feature = "tls")]
+    fn spawn_fake_kube_api_server(body: &'static str) -> (u16, String, thread::JoinHandle<()>) {
+        use std::net::TcpListener;
+
+        let certified_key = rcgen::generate_simple_self_signed(vec!["127.0.0.1".to_string()])
+            .expect("generate self-signed cert");
+        let cert_der = certified_key.cert.der().clone();
+        let cert_pem = certified_key.cert.pem();
+        let key_der = rustls::pki_types::PrivateKeyDer::Pkcs8(
+            rustls::pki_types::PrivatePkcs8KeyDer::from(certified_key.key_pair.serialize_der()),
+        );
+        let server_config = rustls::ServerConfig::builder()
+            .with_no_client_auth()
+            .with_single_cert(vec![cert_der], key_der)
+            .expect("build server tls config");
+        let server_config = std::sync::Arc::new(server_config);
+
+        let listener = TcpListener::bind("127.0.0.1:0").expect("bind fake kube api");
+        let port = listener.local_addr().expect("addr").port();
+
+        let handle = thread::spawn(move || {
+            let (stream, _) = listener.accept().expect("accept kube watch connection");
+            let conn = rustls::ServerConnection::new(server_config).expect("server tls conn");
+            let mut tls_stream = rustls::StreamOwned::new(conn, stream);
+
+            // Read (and discard) the HTTP request up through the blank
+            // line terminating the headers; this fake server only ever
+            // serves one canned response regardless of the request path.
+            let mut received = Vec::new();
+            let mut buf = [0u8; 4096];
+            loop {
+                if received.windows(4).any(|w| w == b"\r\n\r\n") {
+                    break;
+                }
+                match tls_stream.read(&mut buf) {
+                    Ok(0) => return,
+                    Ok(n) => received.extend_from_slice(&buf[..n]),
+                    // A client that doesn't trust this server's certificate
+                    // aborts the handshake (e.g. the "different CA" test);
+                    // that's an expected outcome here, not a test failure.
+                    Err(_) => return,
+                }
+            }
+
+            let response = format!(
+                "HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{}",
+                body.len(),
+                body
+            );
+            let _ = tls_stream.write_all(response.as_bytes());
+        });
+
+        (port, cert_pem, handle)
+    }
+
+    #[cfg(feature = "tls")]
+    const FAKE_WATCH_BODY: &str = "{\"type\":\"ADDED\",\"object\":{\"metadata\":{\"name\":\"nginx\",\"namespace\":\"default\",\"resourceVersion\":\"1\"},\"spec\":{\"hostPID\":false,\"hostNetwork\":false,\"containers\":[{\"name\":\"c1\",\"image\":\"nginx\"}],\"volumes\":[]}}}\n";
+
+    #[cfg(feature = "tls")]
+    #[test]
+    fn watch_pods_succeeds_when_trusting_the_servers_own_ca() {
+        let (port, cert_pem, handle) = spawn_fake_kube_api_server(FAKE_WATCH_BODY);
+        let client = KubeClient::for_test(
+            format!("https://127.0.0.1:{port}"),
+            "test-token".to_string(),
+            cert_pem,
+        );
+        let body = client
+            .watch_pods(None, "")
+            .expect("watch_pods should succeed");
+        assert!(body.contains("\"name\":\"nginx\""));
+        handle.join().expect("server thread");
+    }
+
+    #[cfg(feature = "tls")]
+    #[test]
+    fn watch_pods_fails_closed_when_trusting_a_different_ca() {
+        let (port, _real_cert_pem, handle) = spawn_fake_kube_api_server(FAKE_WATCH_BODY);
+        // A CA the server did NOT present a certificate for.
+        let other_cert_pem = rcgen::generate_simple_self_signed(vec!["127.0.0.1".to_string()])
+            .expect("generate other self-signed cert")
+            .cert
+            .pem();
+        let client = KubeClient::for_test(
+            format!("https://127.0.0.1:{port}"),
+            "test-token".to_string(),
+            other_cert_pem,
+        );
+        let err = client
+            .watch_pods(None, "")
+            .expect_err("watch_pods must fail closed against an untrusted CA");
+        assert!(
+            err.contains("kubernetes watch request failed"),
+            "unexpected error: {err}"
+        );
+        handle.join().expect("server thread");
+    }
+
+    #[cfg(not(feature = "tls"))]
+    #[test]
+    fn watch_pods_fails_clearly_without_the_tls_feature() {
+        let client = KubeClient::for_test(
+            "https://127.0.0.1:1".to_string(),
+            "test-token".to_string(),
+            String::new(),
+        );
+        let err = client.watch_pods(None, "").unwrap_err();
+        assert!(err.contains("tls"), "unexpected error: {err}");
     }
 }
