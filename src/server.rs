@@ -401,6 +401,31 @@ fn parse_audit_status_filter(value: &str) -> Option<AuditStatusFilter> {
     normalized.parse::<u16>().ok().map(AuditStatusFilter::Exact)
 }
 
+/// Whether `[collectors].wmi_enabled` allows the WMI/PowerShell polling
+/// collector paths (`collector_windows.rs`) to run. `false` skips them
+/// entirely — see the periodic poll loop in `server_runtime.rs`
+/// (`spawn_windows_wmi_poll_loop`) and `collector_windows::WmiScanScheduler`.
+#[cfg(target_os = "windows")]
+fn windows_wmi_enabled(state: &Arc<Mutex<AppState>>) -> bool {
+    let s = state
+        .lock()
+        .unwrap_or_else(std::sync::PoisonError::into_inner);
+    s.config.collectors.wmi_enabled
+}
+
+/// Response body for a WMI-backed endpoint when `wmi_enabled = false`,
+/// naming the array field the caller would otherwise have populated.
+#[cfg(target_os = "windows")]
+fn windows_wmi_disabled_json(items_field: &str) -> String {
+    serde_json::json!({
+        items_field: [],
+        "count": 0,
+        "platform": "windows",
+        "message": "collectors.wmi_enabled=false: WMI/PowerShell polling is disabled",
+    })
+    .to_string()
+}
+
 fn parse_bool_query(value: &str) -> Option<bool> {
     match value.trim().to_ascii_lowercase().as_str() {
         "1" | "true" | "yes" | "authenticated" => Some(true),
@@ -6583,28 +6608,32 @@ fn handle_api(
             }
             #[cfg(target_os = "windows")]
             {
-                let procs = crate::collector_windows::collect_processes();
-                let items: Vec<serde_json::Value> = procs
-                    .iter()
-                    .map(|p| {
-                        serde_json::json!({
-                            "pid": p.pid, "ppid": p.ppid, "name": p.name,
-                            "user": if p.user.is_empty() { "—" } else { &p.user },
-                            "group": "—",
-                            "cpu_percent": 0.0, "mem_percent": 0.0,
+                if !windows_wmi_enabled(state) {
+                    json_response(&windows_wmi_disabled_json("processes"), 200)
+                } else {
+                    let procs = crate::collector_windows::collect_processes();
+                    let items: Vec<serde_json::Value> = procs
+                        .iter()
+                        .map(|p| {
+                            serde_json::json!({
+                                "pid": p.pid, "ppid": p.ppid, "name": p.name,
+                                "user": if p.user.is_empty() { "—" } else { &p.user },
+                                "group": "—",
+                                "cpu_percent": 0.0, "mem_percent": 0.0,
+                            })
                         })
-                    })
-                    .collect();
-                json_response(
-                    &serde_json::json!({
-                        "processes": items, "count": items.len(),
-                        "total_cpu_percent": 0.0,
-                        "total_mem_percent": 0.0,
-                        "platform": "windows",
-                    })
-                    .to_string(),
-                    200,
-                )
+                        .collect();
+                    json_response(
+                        &serde_json::json!({
+                            "processes": items, "count": items.len(),
+                            "total_cpu_percent": 0.0,
+                            "total_mem_percent": 0.0,
+                            "platform": "windows",
+                        })
+                        .to_string(),
+                        200,
+                    )
+                }
             }
             #[cfg(not(any(target_os = "macos", target_os = "linux", target_os = "windows")))]
             {
@@ -6679,34 +6708,38 @@ fn handle_api(
             }
             #[cfg(target_os = "windows")]
             {
-                let procs = crate::collector_windows::collect_processes();
-                let findings = crate::collector_windows::analyze_processes(&procs);
-                let items: Vec<serde_json::Value> = findings
-                    .iter()
-                    .map(|f| {
-                        serde_json::json!({
-                            "pid": f.pid, "name": f.name, "user": f.user,
-                            "risk_level": f.risk_level, "reason": f.reason,
-                            "cpu_percent": f.cpu_percent, "mem_percent": f.mem_percent,
+                if !windows_wmi_enabled(state) {
+                    json_response(&windows_wmi_disabled_json("findings"), 200)
+                } else {
+                    let procs = crate::collector_windows::collect_processes();
+                    let findings = crate::collector_windows::analyze_processes(&procs);
+                    let items: Vec<serde_json::Value> = findings
+                        .iter()
+                        .map(|f| {
+                            serde_json::json!({
+                                "pid": f.pid, "name": f.name, "user": f.user,
+                                "risk_level": f.risk_level, "reason": f.reason,
+                                "cpu_percent": f.cpu_percent, "mem_percent": f.mem_percent,
+                            })
                         })
-                    })
-                    .collect();
-                let critical = findings
-                    .iter()
-                    .filter(|f| f.risk_level == "critical")
-                    .count();
-                let severe = findings.iter().filter(|f| f.risk_level == "severe").count();
-                let elevated = findings
-                    .iter()
-                    .filter(|f| f.risk_level == "elevated")
-                    .count();
-                json_response(&serde_json::json!({
-                    "findings": items, "total": items.len(),
-                    "risk_summary": { "critical": critical, "severe": severe, "elevated": elevated },
-                    "process_count": procs.len(),
-                    "status": if critical > 0 { "critical" } else if severe > 0 { "warning" } else { "clean" },
-                    "platform": "windows",
-                }).to_string(), 200)
+                        .collect();
+                    let critical = findings
+                        .iter()
+                        .filter(|f| f.risk_level == "critical")
+                        .count();
+                    let severe = findings.iter().filter(|f| f.risk_level == "severe").count();
+                    let elevated = findings
+                        .iter()
+                        .filter(|f| f.risk_level == "elevated")
+                        .count();
+                    json_response(&serde_json::json!({
+                        "findings": items, "total": items.len(),
+                        "risk_summary": { "critical": critical, "severe": severe, "elevated": elevated },
+                        "process_count": procs.len(),
+                        "status": if critical > 0 { "critical" } else if severe > 0 { "warning" } else { "clean" },
+                        "platform": "windows",
+                    }).to_string(), 200)
+                }
             }
             #[cfg(not(any(target_os = "macos", target_os = "linux", target_os = "windows")))]
             {
@@ -6793,24 +6826,28 @@ fn handle_api(
             }
             #[cfg(target_os = "windows")]
             {
-                let apps = crate::collector_windows::collect_installed_apps();
-                let items: Vec<serde_json::Value> = apps
-                    .iter()
-                    .map(|a| {
-                        serde_json::json!({
-                            "name": a.name, "path": a.path, "version": a.version,
-                            "bundle_id": a.bundle_id, "size_mb": (a.size_mb * 10.0).round() / 10.0,
-                            "last_modified": a.last_modified,
+                if !windows_wmi_enabled(state) {
+                    json_response(&windows_wmi_disabled_json("apps"), 200)
+                } else {
+                    let apps = crate::collector_windows::collect_installed_apps();
+                    let items: Vec<serde_json::Value> = apps
+                        .iter()
+                        .map(|a| {
+                            serde_json::json!({
+                                "name": a.name, "path": a.path, "version": a.version,
+                                "bundle_id": a.bundle_id, "size_mb": (a.size_mb * 10.0).round() / 10.0,
+                                "last_modified": a.last_modified,
+                            })
                         })
-                    })
-                    .collect();
-                json_response(
-                    &serde_json::json!({
-                        "apps": items, "count": items.len(), "platform": "windows",
-                    })
-                    .to_string(),
-                    200,
-                )
+                        .collect();
+                    json_response(
+                        &serde_json::json!({
+                            "apps": items, "count": items.len(), "platform": "windows",
+                        })
+                        .to_string(),
+                        200,
+                    )
+                }
             }
             #[cfg(not(any(target_os = "macos", target_os = "linux", target_os = "windows")))]
             {

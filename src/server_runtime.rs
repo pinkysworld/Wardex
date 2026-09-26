@@ -386,6 +386,7 @@ pub async fn run_server(
     spawn_linux_kernel_telemetry(&state);
     spawn_container_runtime_loop(&state);
     spawn_windows_kernel_telemetry(&state);
+    spawn_windows_wmi_poll_loop(&state);
     spawn_macos_kernel_telemetry(&state);
 
     // ── Spawn local host monitoring thread ──────────────────────────
@@ -1281,6 +1282,81 @@ fn spawn_windows_kernel_telemetry(state: &Arc<Mutex<AppState>>) {
 
 #[cfg(not(windows))]
 fn spawn_windows_kernel_telemetry(_state: &Arc<Mutex<AppState>>) {}
+
+/// Start the WMI/PowerShell/`reg.exe`/`netstat` polling collector
+/// (`collector_windows.rs`) that backs the real-time ETW consumer above
+/// when it can't run (not elevated, or `etw_enabled = false`). Honors
+/// `[collectors].wmi_enabled` (skips entirely when `false`) and the
+/// independent `registry_scan_interval_secs` / `process_scan_interval_secs`
+/// / `network_scan_interval_secs` cadences — see
+/// `collector_windows::WmiScanScheduler` for the (platform-independent,
+/// unit-tested) scheduling decision this loop just acts on.
+#[cfg(target_os = "windows")]
+fn spawn_windows_wmi_poll_loop(state: &Arc<Mutex<AppState>>) {
+    let collectors = {
+        let s = crate::state_lock::tracked_lock(state, "server/windows_wmi_poll_config");
+        s.config.collectors.clone()
+    };
+    if !collectors.wmi_enabled {
+        log::info!(
+            "collectors.wmi_enabled=false; skipping the WMI/PowerShell polling collector paths"
+        );
+        return;
+    }
+    let state = Arc::clone(state);
+    std::thread::spawn(move || {
+        let mut scheduler = crate::collector_windows::WmiScanScheduler::default();
+        loop {
+            let (shutdown, collectors) = {
+                let s = crate::state_lock::tracked_lock(&state, "server/windows_wmi_poll_tick");
+                (
+                    s.shutdown.load(Ordering::Relaxed),
+                    s.config.collectors.clone(),
+                )
+            };
+            if shutdown {
+                break;
+            }
+            if !collectors.wmi_enabled {
+                std::thread::sleep(std::time::Duration::from_secs(5));
+                continue;
+            }
+            let now_ms = chrono::Utc::now().timestamp_millis().max(0) as u64;
+            let due = scheduler.poll(
+                now_ms,
+                collectors.wmi_enabled,
+                collectors.registry_scan_interval_secs,
+                collectors.process_scan_interval_secs,
+                collectors.network_scan_interval_secs,
+            );
+            if due.process {
+                let procs = crate::collector_windows::collect_processes();
+                log::debug!(
+                    "[collectors] windows wmi process scan: {} processes",
+                    procs.len()
+                );
+            }
+            if due.registry {
+                let events = crate::collector_windows::snapshot_registry_persistence();
+                log::debug!(
+                    "[collectors] windows wmi registry scan: {} persistence entries",
+                    events.len()
+                );
+            }
+            if due.network {
+                let conns = crate::collector_windows::collect_network_connections();
+                log::debug!(
+                    "[collectors] windows wmi network scan: {} connections",
+                    conns.len()
+                );
+            }
+            std::thread::sleep(std::time::Duration::from_secs(1));
+        }
+    });
+}
+
+#[cfg(not(target_os = "windows"))]
+fn spawn_windows_wmi_poll_loop(_state: &Arc<Mutex<AppState>>) {}
 
 /// Start a real Endpoint Security client on macOS when built with the
 /// `macos-es` feature and entitled to do so, degrading to the existing

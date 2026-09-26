@@ -197,12 +197,26 @@ ebpf_enabled = true             # Linux eBPF tracing backend; not compiled into
                                  # separately (see kernel_events.rs).
 ebpf_programs = ["execsnoop", "tcpconnect", "filelife"]
 etw_enabled = true              # Windows Event Tracing for Windows
-wmi_enabled = true              # Windows WMI/PowerShell collector paths
-amsi_enabled = true             # Windows AMSI script-content inspection
-registry_scan_interval_secs = 300
-process_scan_interval_secs = 30
-network_scan_interval_secs = 15
+wmi_enabled = true              # Windows WMI/PowerShell/reg.exe/netstat
+                                 # polling collector paths; `false` skips
+                                 # them entirely — both the periodic poll
+                                 # loop (server_runtime.rs) and the
+                                 # on-demand /api/processes/* and
+                                 # /api/host/apps endpoints on Windows.
+amsi_enabled = true              # Windows AMSI script-content inspection
+registry_scan_interval_secs = 300  # Registry persistence-key scan cadence
+process_scan_interval_secs = 30    # Process inventory scan cadence
+network_scan_interval_secs = 15    # Network connection scan cadence
 ```
+
+The three scan intervals above drive independent cadences within the same
+WMI/PowerShell polling loop (`collector_windows::WmiScanScheduler`): each
+scan (registry/process/network) runs on its own schedule rather than all
+three firing together on one fixed tick, and every scan runs once
+immediately on startup regardless of its configured interval. Setting
+`wmi_enabled = false` disables all three, independent of `etw_enabled` —
+this is the fallback poller the real-time ETW consumer degrades to when it
+can't run (see `docs/runbooks/windows-agent.md`), not the ETW path itself.
 
 ### `[container]`
 

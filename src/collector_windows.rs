@@ -968,6 +968,110 @@ fn risk_ord(level: &str) -> u8 {
     }
 }
 
+// ── WMI/PowerShell polling cadence ──────────────────────────────────
+//
+// Decides *when* the periodic WMI/PowerShell polling collector (as
+// opposed to the real-time ETW consumer in `kernel_windows/`) should run
+// each of its three independently configurable scans
+// (`[collectors].registry_scan_interval_secs` / `process_scan_interval_secs`
+// / `network_scan_interval_secs`), and whether it should run at all
+// (`[collectors].wmi_enabled`). Kept pure and platform-independent (no
+// `#[cfg(windows)]`, no actual `wmic`/`reg.exe` invocation) so the decision
+// logic itself is unit-tested on every CI host, including Linux — only the
+// caller that acts on its output (`server_runtime.rs`) is Windows-only.
+
+/// Whether a periodic scan with the given `interval_secs` cadence is due,
+/// given how long it has been (in milliseconds) since it last ran.
+/// `interval_secs == 0` means "always due" rather than "never", so a
+/// misconfigured zero interval fails open to polling every tick instead of
+/// silently never scanning.
+pub fn scan_due(elapsed_ms: u64, interval_secs: u64) -> bool {
+    interval_secs == 0 || elapsed_ms >= interval_secs.saturating_mul(1000)
+}
+
+/// Which of the three WMI/PowerShell polling scans are due at a given
+/// tick.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub struct WmiScanDue {
+    pub registry: bool,
+    pub process: bool,
+    pub network: bool,
+}
+
+impl WmiScanDue {
+    /// No scan is due — used when `wmi_enabled = false` skips the
+    /// WMI/PowerShell polling paths entirely.
+    pub fn none() -> Self {
+        Self::default()
+    }
+
+    pub fn any(&self) -> bool {
+        self.registry || self.process || self.network
+    }
+}
+
+/// Tracks the last-run timestamp (milliseconds since an arbitrary but
+/// consistent epoch, e.g. `Instant`-relative or Unix time) for each of the
+/// three WMI/PowerShell polling scan cadences, and decides which are due
+/// at a given tick.
+#[derive(Debug, Clone, Copy, Default)]
+pub struct WmiScanScheduler {
+    last_registry_ms: u64,
+    last_process_ms: u64,
+    last_network_ms: u64,
+    ticked_once: bool,
+}
+
+impl WmiScanScheduler {
+    /// Decide which scans are due at `now_ms`, given the operator's
+    /// configured cadence for each. When `wmi_enabled` is `false`, nothing
+    /// is ever due — this is what makes `wmi_enabled=false` skip the
+    /// WMI/PowerShell polling paths. Every scan runs on the very first
+    /// tick regardless of interval, so a freshly started agent doesn't
+    /// wait a full cycle before its first snapshot.
+    pub fn poll(
+        &mut self,
+        now_ms: u64,
+        wmi_enabled: bool,
+        registry_scan_interval_secs: u64,
+        process_scan_interval_secs: u64,
+        network_scan_interval_secs: u64,
+    ) -> WmiScanDue {
+        if !wmi_enabled {
+            return WmiScanDue::none();
+        }
+        let first_tick = !self.ticked_once;
+        self.ticked_once = true;
+        let due = WmiScanDue {
+            registry: first_tick
+                || scan_due(
+                    now_ms.saturating_sub(self.last_registry_ms),
+                    registry_scan_interval_secs,
+                ),
+            process: first_tick
+                || scan_due(
+                    now_ms.saturating_sub(self.last_process_ms),
+                    process_scan_interval_secs,
+                ),
+            network: first_tick
+                || scan_due(
+                    now_ms.saturating_sub(self.last_network_ms),
+                    network_scan_interval_secs,
+                ),
+        };
+        if due.registry {
+            self.last_registry_ms = now_ms;
+        }
+        if due.process {
+            self.last_process_ms = now_ms;
+        }
+        if due.network {
+            self.last_network_ms = now_ms;
+        }
+        due
+    }
+}
+
 // ── Tests ───────────────────────────────────────────────────────────
 
 #[cfg(test)]
@@ -1210,5 +1314,90 @@ mod tests {
             powershell_activity: vec![],
         };
         assert_eq!(snap.total_events(), 0);
+    }
+
+    // ── WMI/PowerShell polling cadence ──────────────────────────────
+
+    #[test]
+    fn scan_due_treats_zero_interval_as_always_due() {
+        assert!(scan_due(0, 0));
+        assert!(scan_due(999_999, 0));
+    }
+
+    #[test]
+    fn scan_due_respects_configured_interval() {
+        assert!(!scan_due(29_999, 30));
+        assert!(scan_due(30_000, 30));
+        assert!(scan_due(30_001, 30));
+    }
+
+    #[test]
+    fn wmi_scan_scheduler_disabled_never_due() {
+        let mut sched = WmiScanScheduler::default();
+        let due = sched.poll(0, false, 1, 1, 1);
+        assert_eq!(due, WmiScanDue::none());
+        assert!(!due.any());
+        // Still never due on a later tick either — disabled means
+        // disabled, not "not yet".
+        let due = sched.poll(1_000_000, false, 1, 1, 1);
+        assert!(!due.any());
+    }
+
+    #[test]
+    fn wmi_scan_scheduler_first_tick_runs_every_scan() {
+        let mut sched = WmiScanScheduler::default();
+        let due = sched.poll(0, true, 300, 30, 15);
+        assert_eq!(
+            due,
+            WmiScanDue {
+                registry: true,
+                process: true,
+                network: true,
+            }
+        );
+    }
+
+    #[test]
+    fn wmi_scan_scheduler_honors_independent_cadences() {
+        let mut sched = WmiScanScheduler::default();
+        // First tick: everything runs and the timers reset to t=0.
+        let _ = sched.poll(0, true, 300, 30, 15);
+
+        // At t=20s: only the 15s network cadence is due again.
+        let due = sched.poll(20_000, true, 300, 30, 15);
+        assert_eq!(
+            due,
+            WmiScanDue {
+                registry: false,
+                process: false,
+                network: true,
+            }
+        );
+
+        // At t=35s (15s after the last network run at t=20s, and 35s
+        // after process last ran at t=0): process and network are due,
+        // registry (300s cadence) is not.
+        let due = sched.poll(35_000, true, 300, 30, 15);
+        assert_eq!(
+            due,
+            WmiScanDue {
+                registry: false,
+                process: true,
+                network: true,
+            }
+        );
+    }
+
+    #[test]
+    fn wmi_scan_scheduler_re_enabling_treats_next_tick_as_first() {
+        let mut sched = WmiScanScheduler::default();
+        let _ = sched.poll(0, true, 300, 30, 15);
+        let due = sched.poll(1_000, false, 300, 30, 15);
+        assert!(!due.any());
+        // Disabling doesn't reset `ticked_once`, so re-enabling mid-cycle
+        // respects the already-recorded last-run timestamps rather than
+        // forcing a redundant immediate re-scan of everything.
+        let due = sched.poll(2_000, true, 300, 30, 15);
+        assert!(!due.any());
     }
 }
