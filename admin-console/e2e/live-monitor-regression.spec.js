@@ -124,7 +124,7 @@ test('preserves process context and falls back when live monitor detail and anal
   const beforeWindowScroll = await page.evaluate(() => window.scrollY);
   const beforeTableScroll = await processTable.evaluate((element) => element.scrollTop);
 
-  await runningCard.getByRole('button', { name: '↻ Refresh' }).click();
+  await runningCard.getByRole('button', { name: 'Refresh' }).click();
 
   await expect.poll(() => page.evaluate(() => window.scrollY)).toBe(beforeWindowScroll);
   await expect.poll(() => processTable.evaluate((element) => element.scrollTop)).toBe(
@@ -140,7 +140,7 @@ test('preserves process context and falls back when live monitor detail and anal
 
   const beforeDrawerRefreshWindowScroll = await page.evaluate(() => window.scrollY);
 
-  await runningCard.getByRole('button', { name: '↻ Refresh' }).click({ force: true });
+  await runningCard.getByRole('button', { name: 'Refresh' }).click({ force: true });
 
   await expect.poll(() => page.evaluate(() => window.scrollY)).toBe(beforeDrawerRefreshWindowScroll);
 

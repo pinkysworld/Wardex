@@ -19,8 +19,9 @@ describe('Tooltip', () => {
 
   it('shows tooltip on mouse enter', () => {
     render(<Tooltip text="Secret tip" />);
-    const trigger =
-      screen.getByText('ⓘ').closest('.tooltip-trigger') || screen.getByText('ⓘ').parentElement;
+    const trigger = screen
+      .getByRole('button', { name: 'More information' })
+      .closest('.tooltip-trigger');
     fireEvent.mouseEnter(trigger);
     expect(screen.getByRole('tooltip')).toHaveTextContent('Secret tip');
   });
@@ -36,8 +37,9 @@ describe('Tooltip', () => {
 
   it('hides tooltip on mouse leave', () => {
     render(<Tooltip text="Vanishing tip" />);
-    const trigger =
-      screen.getByText('ⓘ').closest('.tooltip-trigger') || screen.getByText('ⓘ').parentElement;
+    const trigger = screen
+      .getByRole('button', { name: 'More information' })
+      .closest('.tooltip-trigger');
     fireEvent.mouseEnter(trigger);
     expect(screen.getByText('Vanishing tip')).toBeInTheDocument();
     fireEvent.mouseLeave(trigger);

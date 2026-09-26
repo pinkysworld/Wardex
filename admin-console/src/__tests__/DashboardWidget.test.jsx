@@ -22,7 +22,7 @@ describe('DashboardWidget', () => {
     expect(screen.getByText('Visible content')).toBeInTheDocument();
 
     // Find and click the collapse toggle
-    const toggleBtn = screen.queryByText('▾') || screen.getByText('▸');
+    const toggleBtn = screen.getByRole('button', { name: 'Collapse Collapsible' });
     fireEvent.click(toggleBtn);
     expect(screen.queryByText('Visible content')).not.toBeInTheDocument();
   });
@@ -33,8 +33,8 @@ describe('DashboardWidget', () => {
         <p>Hidden content</p>
       </DashboardWidget>,
     );
-    // The expand icon should be visible
-    expect(screen.getByText('▸')).toBeInTheDocument();
+    // The expand button should be visible
+    expect(screen.getByRole('button', { name: 'Expand Hidden' })).toBeInTheDocument();
   });
 
   it('calls onRemove when remove button clicked', () => {
@@ -44,7 +44,7 @@ describe('DashboardWidget', () => {
         <p>Content</p>
       </DashboardWidget>,
     );
-    const removeBtn = screen.getByText('✕');
+    const removeBtn = screen.getByRole('button', { name: 'Remove Removable widget' });
     fireEvent.click(removeBtn);
     expect(onRemove).toHaveBeenCalledWith('w4');
   });
@@ -55,6 +55,6 @@ describe('DashboardWidget', () => {
         <p>Content</p>
       </DashboardWidget>,
     );
-    expect(screen.queryByText('✕')).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: /Remove .* widget/ })).not.toBeInTheDocument();
   });
 });

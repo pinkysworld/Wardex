@@ -1540,7 +1540,7 @@ describe('Settings', () => {
       throw new Error('Long-Retention History card not found');
     }
 
-    await user.click(within(longRetentionCard).getByRole('button', { name: '↻ Refresh' }));
+    await user.click(within(longRetentionCard).getByRole('button', { name: 'Refresh' }));
 
     await waitFor(() => {
       expect(countGetCalls('/api/retention/status')).toBe(initialRetentionCalls + 1);
@@ -1596,7 +1596,7 @@ describe('Settings', () => {
       throw new Error('Long-Retention History card not found');
     }
 
-    await user.click(within(longRetentionCard).getByRole('button', { name: '↻ Refresh' }));
+    await user.click(within(longRetentionCard).getByRole('button', { name: 'Refresh' }));
 
     await waitFor(() => {
       expect(countGetCalls('/api/retention/status')).toBe(initialRetentionCalls + 1);
