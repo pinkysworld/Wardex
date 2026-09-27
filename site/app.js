@@ -3,10 +3,10 @@
    Product-oriented landing page with lightweight progressive enhancement.
    ═══════════════════════════════════════════════════════════════════════════ */
 
-const RELEASE_VERSION = "1.0.30";
-const MODULE_COUNT = "196";
+const RELEASE_VERSION = "1.1.0";
+const MODULE_COUNT = "197";
 const API_COUNT = "268";
-const TEST_COUNT = "2390";
+const TEST_COUNT = "2488";
 
 const SITE_ROUTES = [
   { id: "overview", label: "Overview", file: "index.html", slug: "", nav: "primary" },

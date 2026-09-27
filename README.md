@@ -14,9 +14,9 @@ Wardex (`pinkysworld/Wardex`) is a Rust-based XDR and SIEM platform for private-
 - **Scan across platforms:** malware, virus, trojan, and rootkit workflows cover Linux, macOS, and Windows with local engines plus optional open-source signature presets.
 - **Ship verifiably:** releases include checksums, SBOMs, provenance, signed artifacts, and documented verification gates.
 
-## Unreleased
+## Current Release: `v1.1.0`
 
-Work merged since `v1.0.30` and not yet released:
+This minor release turns the documented-but-missing capabilities into real implementations and hardens them after a full code review:
 
 - **Real Tantivy-backed search** replacing the previous in-memory re-scan (`/api/search`, `/api/hunt`).
 - **Real kernel telemetry**: Linux (`CN_PROC` netlink process events, `fanotify`/`inotify` file activity — eBPF is not implemented), a Windows ETW consumer (requires elevation), and a macOS Endpoint Security client behind the opt-in `macos-es` feature (requires an Apple `endpoint-security` entitlement, not exercised in CI).
@@ -30,11 +30,12 @@ Work merged since `v1.0.30` and not yet released:
 - **Live Docker/Podman and Kubernetes container event sources**, including an in-cluster Kubernetes Pod watch that trusts the mounted serviceaccount CA over TLS.
 - **Previously documented-but-missing config keys implemented**, including `[collection]`, `[detection]`, `[collectors]`, `[relay]`, and `[attestation]`.
 - **Dependency and security updates**: `rustls` bumped for `RUSTSEC-2026-0285`, plus major-version upgrades to `rand`, `ed25519-dalek`, `aes-gcm`, and `toml`.
+- **CI runtime caps**: every CI job has an explicit timeout and superseded pull-request runs are cancelled.
 - **Admin console redesign**: topbar/navigation chrome cleanup and a shared icon set.
 
-See [CHANGELOG.md](CHANGELOG.md#unreleased) for full details.
+See [CHANGELOG.md](CHANGELOG.md#110--2026-09-27) for full details.
 
-## Current Release: `v1.0.30`
+## Previous Release: `v1.0.30`
 
 This release is a persistence-consolidation and reliability patch: every embedded store now persists to a durable SQLite `.db` file (migrating legacy JSON in place on first load), the dependency surface is refreshed, and several correctness edges in enforcement and server startup are hardened.
 
@@ -123,7 +124,7 @@ The public website lives in [site/](site/) and mirrors the main product, release
 
 ## Documentation Surfaces
 
-The GitHub docs and the public website now share the same `v1.0.30` release surface for operator guides and API reference.
+The GitHub docs and the public website now share the same `v1.1.0` release surface for operator guides and API reference.
 
 ![Wardex documentation hub](site/media/insights/resources-live.png)
 
