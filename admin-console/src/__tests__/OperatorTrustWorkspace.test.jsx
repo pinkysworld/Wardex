@@ -173,7 +173,7 @@ describe('Operator trust workspaces', () => {
   it('renders detection validation evidence and action', async () => {
     renderWorkspace(<DetectionLab />);
     expect(await screen.findByRole('heading', { name: /Detection Lab/i })).toBeInTheDocument();
-    expect(screen.getByText(/Expected detections/i)).toBeInTheDocument();
+    expect(await screen.findByText(/Expected detections/i)).toBeInTheDocument();
     fireEvent.click(screen.getByRole('button', { name: /Run validation/i }));
     await waitFor(() => expect(screen.getByText(/completed/i)).toBeInTheDocument());
   });
@@ -209,7 +209,7 @@ describe('Operator trust workspaces', () => {
   it('renders operations health cards', async () => {
     renderWorkspace(<OperationsHealth />);
     expect(await screen.findByRole('heading', { name: /Operations Health/i })).toBeInTheDocument();
-    expect(screen.getByText(/Current operations focus/i)).toBeInTheDocument();
+    expect(await screen.findByText(/Current operations focus/i)).toBeInTheDocument();
     expect(screen.getByText(/Operations SLOs are steady/i)).toBeInTheDocument();
     expect(screen.getByText(/queue_lag/i)).toBeInTheDocument();
   });
