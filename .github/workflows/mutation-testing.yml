@@ -16,10 +16,15 @@ on:
     - cron: "30 3 * * 1,4"
   workflow_dispatch:
 
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
 jobs:
   mutants:
     name: cargo-mutants (${{ matrix.module }})
     runs-on: ubuntu-latest
+    timeout-minutes: 60
     # Advisory only — never block on this job.
     continue-on-error: true
     strategy:
@@ -38,7 +43,7 @@ jobs:
           rustup toolchain install stable --profile minimal
           rustup default stable
       - name: Cache cargo
-        uses: actions/cache@27d5ce7f107fe9357f9df03efb73ab90386fccae # v5
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
           path: |
             ~/.cargo/registry

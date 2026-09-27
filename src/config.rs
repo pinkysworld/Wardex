@@ -177,7 +177,7 @@ impl Default for MonitorScopeSettings {
     }
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize)]
 pub struct MonitorSettings {
     pub interval_secs: u64,
     pub alert_threshold: f32,
@@ -190,6 +190,12 @@ pub struct MonitorSettings {
     pub watch_paths: Vec<String>,
     #[serde(default)]
     pub scope: MonitorScopeSettings,
+    /// True when `interval_secs` was explicitly present in the parsed config
+    /// file, as opposed to filled in from its default. Not serialized; used
+    /// by [`CollectionSettings::effective_interval_secs`] to decide whether
+    /// a "both set and differ" deprecation note applies.
+    #[serde(skip)]
+    pub interval_secs_explicit: bool,
 }
 
 impl Default for MonitorSettings {
@@ -205,8 +211,62 @@ impl Default for MonitorSettings {
             cef: false,
             watch_paths: Vec::new(),
             scope: MonitorScopeSettings::default(),
+            interval_secs_explicit: false,
         }
     }
+}
+
+impl<'de> Deserialize<'de> for MonitorSettings {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: serde::Deserializer<'de>,
+    {
+        #[derive(Deserialize)]
+        #[serde(rename_all = "snake_case")]
+        struct Raw {
+            #[serde(default)]
+            interval_secs: Option<u64>,
+            #[serde(default = "default_monitor_alert_threshold")]
+            alert_threshold: f32,
+            #[serde(default = "default_monitor_alert_log")]
+            alert_log: String,
+            #[serde(default)]
+            dry_run: bool,
+            #[serde(default)]
+            duration_secs: u64,
+            #[serde(default)]
+            webhook_url: Option<String>,
+            #[serde(default)]
+            syslog: bool,
+            #[serde(default)]
+            cef: bool,
+            #[serde(default)]
+            watch_paths: Vec<String>,
+            #[serde(default)]
+            scope: MonitorScopeSettings,
+        }
+        let raw = Raw::deserialize(deserializer)?;
+        Ok(MonitorSettings {
+            interval_secs: raw.interval_secs.unwrap_or(5),
+            alert_threshold: raw.alert_threshold,
+            alert_log: raw.alert_log,
+            dry_run: raw.dry_run,
+            duration_secs: raw.duration_secs,
+            webhook_url: raw.webhook_url,
+            syslog: raw.syslog,
+            cef: raw.cef,
+            watch_paths: raw.watch_paths,
+            scope: raw.scope,
+            interval_secs_explicit: raw.interval_secs.is_some(),
+        })
+    }
+}
+
+fn default_monitor_alert_threshold() -> f32 {
+    3.5
+}
+fn default_monitor_alert_log() -> String {
+    "var/alerts.jsonl".into()
 }
 
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
@@ -244,6 +304,343 @@ pub struct Config {
     pub cluster: crate::cluster::ClusterConfig,
     #[serde(default)]
     pub clickhouse: Option<crate::storage_clickhouse::ClickHouseConfig>,
+    /// Live container (Docker/Podman) and Kubernetes event sources.
+    #[serde(default)]
+    pub container: crate::container_runtime::ContainerRuntimeConfig,
+    /// Local telemetry collection cadence.
+    #[serde(default)]
+    pub collection: CollectionSettings,
+    /// Detection engine tuning, including the low-and-slow window.
+    #[serde(default)]
+    pub detection: DetectionSettings,
+    /// Platform collector backend selection (eBPF/ETW/AMSI/WMI) and scan cadences.
+    #[serde(default)]
+    pub collectors: CollectorsSettings,
+    /// Relay/edge sync settings.
+    #[serde(default)]
+    pub relay: RelaySettings,
+    /// Supply-chain attestation settings.
+    #[serde(default)]
+    pub attestation: AttestationSettings,
+    /// Full-text search index (Tantivy): index path, writer memory budget,
+    /// commit interval, and retention. All fields have serde defaults so
+    /// existing config files load unchanged.
+    #[serde(default)]
+    pub search: crate::search::EventStoreConfig,
+    /// Federated-learning configuration (disabled by default). See
+    /// `docs/FEDERATED_LEARNING.md` for the protocol and threat model.
+    #[serde(default)]
+    pub federation: crate::federated::FederationConfig,
+    /// Real WebAssembly extension runtime (see `wasm_runtime` module).
+    #[serde(default)]
+    pub wasm_runtime: crate::wasm_runtime::WasmRuntimeSettings,
+}
+
+/// `[collection]` — local telemetry collection cadence, documented in
+/// `docs/CONFIGURATION.md`.
+#[derive(Debug, Clone, Serialize)]
+pub struct CollectionSettings {
+    /// How often to collect local telemetry, in seconds. Drives the
+    /// agent's main sampling loop cadence (see `agent_client::run_monitor_loop`).
+    ///
+    /// For backward compatibility with configs written before `[collection]`
+    /// existed, this value is only used when explicitly present in the
+    /// parsed config file; see [`CollectionSettings::effective_interval_secs`].
+    #[serde(default = "default_collection_interval_secs")]
+    pub collection_interval_secs: u64,
+    /// Event batch size for SIEM forwarding.
+    #[serde(default = "default_max_events_per_batch")]
+    pub max_events_per_batch: usize,
+    /// True when `collection_interval_secs` was explicitly present in the
+    /// parsed config file, as opposed to filled in from its default. Not
+    /// serialized.
+    #[serde(skip)]
+    pub collection_interval_secs_explicit: bool,
+}
+
+fn default_collection_interval_secs() -> u64 {
+    10
+}
+fn default_max_events_per_batch() -> usize {
+    500
+}
+
+impl<'de> Deserialize<'de> for CollectionSettings {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: serde::Deserializer<'de>,
+    {
+        #[derive(Deserialize)]
+        #[serde(rename_all = "snake_case")]
+        struct Raw {
+            #[serde(default)]
+            collection_interval_secs: Option<u64>,
+            #[serde(default = "default_max_events_per_batch")]
+            max_events_per_batch: usize,
+        }
+        let raw = Raw::deserialize(deserializer)?;
+        Ok(CollectionSettings {
+            collection_interval_secs: raw
+                .collection_interval_secs
+                .unwrap_or_else(default_collection_interval_secs),
+            max_events_per_batch: raw.max_events_per_batch,
+            collection_interval_secs_explicit: raw.collection_interval_secs.is_some(),
+        })
+    }
+}
+
+/// One-time guard so the "collection vs. monitor interval both set" note is
+/// logged at most once per process, regardless of how many times config is
+/// (re)loaded.
+static COLLECTION_INTERVAL_MISMATCH_LOGGED: std::sync::Once = std::sync::Once::new();
+
+impl CollectionSettings {
+    /// Effective local-telemetry sampling interval, in seconds.
+    ///
+    /// When `collection_interval_secs` was explicitly set in the config
+    /// file, it is used (and wins over `monitor.interval_secs` when both are
+    /// set and differ, logging a one-time deprecation note). Otherwise, for
+    /// backward compatibility with configs that predate `[collection]` and
+    /// only set `[monitor] interval_secs`, the monitor value is used.
+    pub fn effective_interval_secs(&self, monitor: &MonitorSettings) -> u64 {
+        if self.collection_interval_secs_explicit {
+            if monitor.interval_secs_explicit
+                && monitor.interval_secs != self.collection_interval_secs
+            {
+                COLLECTION_INTERVAL_MISMATCH_LOGGED.call_once(|| {
+                    log::warn!(
+                        "config: both [collection] collection_interval_secs ({}) and [monitor] interval_secs ({}) are set and differ; collection_interval_secs wins. Remove monitor.interval_secs or align the two to silence this note.",
+                        self.collection_interval_secs,
+                        monitor.interval_secs
+                    );
+                });
+            }
+            self.collection_interval_secs
+        } else {
+            monitor.interval_secs
+        }
+    }
+}
+
+impl Default for CollectionSettings {
+    fn default() -> Self {
+        Self {
+            collection_interval_secs: default_collection_interval_secs(),
+            max_events_per_batch: default_max_events_per_batch(),
+            collection_interval_secs_explicit: false,
+        }
+    }
+}
+
+/// `[detection]` — detection engine tuning, documented in `docs/CONFIGURATION.md`.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct DetectionSettings {
+    /// Detection sensitivity profile: "aggressive", "balanced", or "quiet".
+    #[serde(default = "default_detection_profile")]
+    pub profile: String,
+    /// Anomaly score threshold above which a sample is treated as anomalous.
+    #[serde(default = "default_anomaly_threshold")]
+    pub anomaly_threshold: f32,
+    /// Long-window size, in seconds, for low-and-slow attack detection
+    /// (see `detector::SlowAttackDetector`). Converted to a sample count
+    /// assuming one sample per `collection.collection_interval_secs`.
+    #[serde(default = "default_slow_attack_window_secs")]
+    pub slow_attack_window_secs: u64,
+    /// Canary directories monitored for ransomware-style mass file changes.
+    #[serde(default)]
+    pub ransomware_canary_dirs: Vec<String>,
+}
+
+fn default_detection_profile() -> String {
+    "balanced".into()
+}
+fn default_anomaly_threshold() -> f32 {
+    0.75
+}
+fn default_slow_attack_window_secs() -> u64 {
+    3600
+}
+
+impl Default for DetectionSettings {
+    fn default() -> Self {
+        Self {
+            profile: default_detection_profile(),
+            anomaly_threshold: default_anomaly_threshold(),
+            slow_attack_window_secs: default_slow_attack_window_secs(),
+            ransomware_canary_dirs: Vec::new(),
+        }
+    }
+}
+
+impl DetectionSettings {
+    /// Build a [`crate::detector::SlowAttackConfig`] whose long window
+    /// covers `slow_attack_window_secs`, sampling once per
+    /// `sample_interval_secs` (typically `collection.collection_interval_secs`).
+    pub fn slow_attack_config(
+        &self,
+        sample_interval_secs: u64,
+    ) -> crate::detector::SlowAttackConfig {
+        let interval = sample_interval_secs.max(1);
+        let long_window = (self.slow_attack_window_secs / interval).max(1) as usize;
+        let short_window = (long_window / 24).max(1);
+        crate::detector::SlowAttackConfig {
+            short_window,
+            long_window,
+            ..crate::detector::SlowAttackConfig::default()
+        }
+    }
+}
+
+/// `[collectors]` — platform collector backend selection and scan
+/// cadences, documented in the Linux/Windows agent runbooks.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct CollectorsSettings {
+    /// Prefer the eBPF backend when the kernel supports it; `false` force-disables
+    /// it even if available. When no eBPF backend is compiled in, this is a no-op
+    /// and collectors log that the backend is unavailable in this build.
+    #[serde(default = "default_backend_enabled")]
+    pub ebpf_enabled: bool,
+    /// eBPF programs to attach when `ebpf_enabled` and the backend is available.
+    #[serde(default)]
+    pub ebpf_programs: Vec<String>,
+    /// Prefer the Windows ETW backend when available; `false` force-disables it.
+    #[serde(default = "default_backend_enabled")]
+    pub etw_enabled: bool,
+    /// Prefer the AMSI backend for script-content inspection; `false` force-disables it.
+    #[serde(default = "default_backend_enabled")]
+    pub amsi_enabled: bool,
+    /// Enable the WMI/PowerShell-based Windows collector paths (process,
+    /// registry, service, and PowerShell activity collection).
+    #[serde(default = "default_backend_enabled")]
+    pub wmi_enabled: bool,
+    /// Windows registry persistence-key scan cadence, in seconds.
+    #[serde(default = "default_registry_scan_interval_secs")]
+    pub registry_scan_interval_secs: u64,
+    /// Process inventory scan cadence, in seconds.
+    #[serde(default = "default_process_scan_interval_secs")]
+    pub process_scan_interval_secs: u64,
+    /// Network connection scan cadence, in seconds.
+    #[serde(default = "default_network_scan_interval_secs")]
+    pub network_scan_interval_secs: u64,
+}
+
+fn default_backend_enabled() -> bool {
+    true
+}
+fn default_registry_scan_interval_secs() -> u64 {
+    300
+}
+fn default_process_scan_interval_secs() -> u64 {
+    30
+}
+fn default_network_scan_interval_secs() -> u64 {
+    15
+}
+
+impl CollectorsSettings {
+    /// Log a clear, honest message for every backend the operator asked
+    /// to prefer (`*_enabled = true`) that is not compiled into this
+    /// build, so a "why isn't eBPF/ETW/AMSI running?" question has an
+    /// obvious answer in the logs instead of silent no-op behaviour.
+    pub fn log_backend_status(&self) {
+        if self.ebpf_enabled {
+            log::warn!(
+                "ebpf_enabled=true but this build has no eBPF backend compiled in; \
+                 falling back to non-eBPF collection"
+            );
+        }
+        #[cfg(not(target_os = "windows"))]
+        {
+            if self.etw_enabled {
+                log::warn!("etw_enabled=true but ETW is only available on Windows");
+            }
+            if self.amsi_enabled {
+                log::warn!("amsi_enabled=true but AMSI is only available on Windows");
+            }
+        }
+    }
+}
+
+impl Default for CollectorsSettings {
+    fn default() -> Self {
+        Self {
+            ebpf_enabled: default_backend_enabled(),
+            ebpf_programs: Vec::new(),
+            etw_enabled: default_backend_enabled(),
+            amsi_enabled: default_backend_enabled(),
+            wmi_enabled: default_backend_enabled(),
+            registry_scan_interval_secs: default_registry_scan_interval_secs(),
+            process_scan_interval_secs: default_process_scan_interval_secs(),
+            network_scan_interval_secs: default_network_scan_interval_secs(),
+        }
+    }
+}
+
+/// `[relay]` — edge/relay-mode sync settings, documented in
+/// `docs/DEPLOYMENT_MODELS.md`.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct RelaySettings {
+    #[serde(default)]
+    pub enabled: bool,
+    #[serde(default)]
+    pub upstream: String,
+    /// How often the relay pushes its spool to the upstream, in seconds.
+    #[serde(default = "default_sync_interval_secs")]
+    pub sync_interval_secs: u64,
+    #[serde(default = "default_spool_max_bytes")]
+    pub spool_max_bytes: u64,
+}
+
+fn default_sync_interval_secs() -> u64 {
+    300
+}
+fn default_spool_max_bytes() -> u64 {
+    104_857_600
+}
+
+impl Default for RelaySettings {
+    fn default() -> Self {
+        Self {
+            enabled: false,
+            upstream: String::new(),
+            sync_interval_secs: default_sync_interval_secs(),
+            spool_max_bytes: default_spool_max_bytes(),
+        }
+    }
+}
+
+/// `[attestation]` — supply-chain attestation settings, documented in
+/// `docs/DESIGN_SUPPLY_CHAIN.md`.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct AttestationSettings {
+    #[serde(default)]
+    pub enabled: bool,
+    #[serde(default)]
+    pub manifest_path: String,
+    #[serde(default)]
+    pub require_at_boot: bool,
+    #[serde(default = "default_periodic_check_minutes")]
+    pub periodic_check_minutes: u64,
+    /// Path to the local JSON trust store of accepted release-signer
+    /// public keys (see `attestation::TrustStore`).
+    #[serde(default)]
+    pub trust_store_path: String,
+}
+
+fn default_periodic_check_minutes() -> u64 {
+    30
+}
+
+impl Default for AttestationSettings {
+    fn default() -> Self {
+        Self {
+            enabled: false,
+            manifest_path: String::new(),
+            require_at_boot: false,
+            periodic_check_minutes: default_periodic_check_minutes(),
+            trust_store_path: String::new(),
+        }
+    }
 }
 
 /// Security-related settings for token management and session control.
@@ -654,6 +1051,12 @@ impl Default for AgentSettings {
 impl Config {
     pub fn normalize(&mut self) {
         self.monitor.scope.normalize();
+    }
+
+    /// Effective local-telemetry sampling interval, in seconds. See
+    /// [`CollectionSettings::effective_interval_secs`].
+    pub fn effective_collection_interval_secs(&self) -> u64 {
+        self.collection.effective_interval_secs(&self.monitor)
     }
 
     pub fn write_default_toml(path: &Path) -> Result<(), String> {
@@ -1299,5 +1702,164 @@ scheduled_tasks = false
             parsed.retention.remote_syslog_endpoint.as_deref(),
             Some("udp://syslog:514")
         );
+    }
+
+    #[test]
+    fn collection_detection_collectors_relay_attestation_defaults() {
+        let config = Config::default();
+        assert_eq!(config.collection.collection_interval_secs, 10);
+        assert_eq!(config.collection.max_events_per_batch, 500);
+        assert_eq!(config.detection.slow_attack_window_secs, 3600);
+        assert!((config.detection.anomaly_threshold - 0.75).abs() < 0.001);
+        assert!(config.collectors.ebpf_enabled);
+        assert!(config.collectors.etw_enabled);
+        assert!(config.collectors.wmi_enabled);
+        assert!(config.collectors.amsi_enabled);
+        assert_eq!(config.collectors.registry_scan_interval_secs, 300);
+        assert_eq!(config.collectors.process_scan_interval_secs, 30);
+        assert_eq!(config.collectors.network_scan_interval_secs, 15);
+        assert_eq!(config.relay.sync_interval_secs, 300);
+        assert_eq!(config.attestation.periodic_check_minutes, 30);
+        assert!(!config.container.docker_enabled);
+        assert_eq!(config.container.docker_socket_path, "/var/run/docker.sock");
+    }
+
+    #[test]
+    fn new_sections_round_trip_toml() {
+        let mut config = Config::default();
+        config.collection.collection_interval_secs = 20;
+        config.detection.slow_attack_window_secs = 7200;
+        config.collectors.wmi_enabled = false;
+        config.relay.sync_interval_secs = 600;
+        config.attestation.trust_store_path = "/etc/wardex/trust_store.json".into();
+        let toml_str = toml::to_string_pretty(&config).unwrap();
+        let parsed: Config = toml::from_str(&toml_str).unwrap();
+        assert_eq!(parsed.collection.collection_interval_secs, 20);
+        assert_eq!(parsed.detection.slow_attack_window_secs, 7200);
+        assert!(!parsed.collectors.wmi_enabled);
+        assert_eq!(parsed.relay.sync_interval_secs, 600);
+        assert_eq!(
+            parsed.attestation.trust_store_path,
+            "/etc/wardex/trust_store.json"
+        );
+    }
+
+    #[test]
+    fn slow_attack_config_converts_window_secs_to_samples() {
+        let detection = super::DetectionSettings {
+            slow_attack_window_secs: 3600,
+            ..super::DetectionSettings::default()
+        };
+        let cfg = detection.slow_attack_config(10);
+        assert_eq!(cfg.long_window, 360);
+        assert_eq!(cfg.short_window, 15);
+    }
+
+    #[test]
+    fn collectors_log_backend_status_does_not_panic() {
+        // Exercises the "backend not available in this build" logging
+        // path; nothing to assert beyond "doesn't panic".
+        super::CollectorsSettings::default().log_backend_status();
+    }
+
+    /// Prepends the mandatory `[detector]`/`[policy]`/`[output]` sections
+    /// (which have no serde defaults) to a snippet that only sets
+    /// `[monitor]` and/or `[collection]`, so the combination parses as a
+    /// full `Config` while leaving those two sections exactly as written —
+    /// unlike overlaying onto `Config::default()`'s serialized TOML, which
+    /// would make every section "present" and defeat the explicit-vs-default
+    /// tracking these tests are checking.
+    fn config_from_partial_toml(snippet: &str) -> Config {
+        let prefix = r#"
+[detector]
+warmup_samples = 4
+smoothing = 0.22
+learn_threshold = 2.5
+
+[policy]
+critical_score = 5.2
+severe_score = 3.0
+elevated_score = 2.8
+critical_integrity_drift = 0.45
+low_battery_threshold = 20.0
+
+[output]
+audit_path = "var/last-run.audit.log"
+report_path = "var/last-run.report.json"
+checkpoint_interval = 5
+"#;
+        toml::from_str(&format!("{prefix}\n{snippet}")).unwrap()
+    }
+
+    #[test]
+    fn effective_interval_falls_back_to_monitor_when_only_monitor_set() {
+        // A config written before `[collection]` existed: only
+        // `[monitor] interval_secs` is set. The agent must keep using that
+        // cadence rather than silently switching to the collection default.
+        let config = config_from_partial_toml(
+            r#"
+[monitor]
+interval_secs = 7
+alert_threshold = 3.5
+alert_log = "var/alerts.jsonl"
+dry_run = false
+duration_secs = 0
+syslog = false
+cef = false
+watch_paths = []
+"#,
+        );
+        assert!(config.monitor.interval_secs_explicit);
+        assert!(!config.collection.collection_interval_secs_explicit);
+        assert_eq!(config.effective_collection_interval_secs(), 7);
+    }
+
+    #[test]
+    fn effective_interval_uses_collection_when_only_collection_set() {
+        let config = config_from_partial_toml(
+            r#"
+[collection]
+collection_interval_secs = 20
+"#,
+        );
+        assert!(!config.monitor.interval_secs_explicit);
+        assert!(config.collection.collection_interval_secs_explicit);
+        assert_eq!(config.effective_collection_interval_secs(), 20);
+    }
+
+    #[test]
+    fn effective_interval_prefers_collection_when_both_set_and_differ() {
+        let config = config_from_partial_toml(
+            r#"
+[monitor]
+interval_secs = 5
+alert_threshold = 3.5
+alert_log = "var/alerts.jsonl"
+dry_run = false
+duration_secs = 0
+syslog = false
+cef = false
+watch_paths = []
+
+[collection]
+collection_interval_secs = 15
+"#,
+        );
+        assert!(config.monitor.interval_secs_explicit);
+        assert!(config.collection.collection_interval_secs_explicit);
+        // collection wins even though both were explicitly set.
+        assert_eq!(config.effective_collection_interval_secs(), 15);
+    }
+
+    #[test]
+    fn effective_interval_defaults_when_neither_set() {
+        let config = Config::default();
+        assert!(!config.monitor.interval_secs_explicit);
+        assert!(!config.collection.collection_interval_secs_explicit);
+        // Neither explicitly configured: fall back to the historical
+        // monitor default so brand-new default configs keep the
+        // long-standing 5s cadence rather than silently jumping to the
+        // newer collection default.
+        assert_eq!(config.effective_collection_interval_secs(), 5);
     }
 }

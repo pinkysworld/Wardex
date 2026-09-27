@@ -42,7 +42,10 @@ def openapi_operation_count() -> int:
 
 
 def rust_module_count() -> int:
-    return len(list((ROOT / "src").glob("*.rs")))
+    # Recursive: includes submodule directories (e.g. src/kernel_linux/*.rs,
+    # src/kernel_macos/*.rs, src/kernel_windows/*.rs), not just the top-level
+    # src/*.rs files.
+    return len(list((ROOT / "src").rglob("*.rs")))
 
 
 def rust_test_count() -> int:
@@ -61,13 +64,24 @@ def admin_console_test_count() -> int:
     return count
 
 
+PLAYWRIGHT_SPEC_DIRS = [
+    ROOT / "tests" / "playwright",
+    ROOT / "admin-console" / "e2e",
+]
+
+
 def playwright_test_counts() -> tuple[int, int]:
+    # Wardex has two managed Playwright suites: the top-level live/staging
+    # smoke checks in tests/playwright, and the admin-console's mocked-API
+    # e2e specs in admin-console/e2e. Both count toward the release's
+    # "managed Playwright checks" figure.
     specs = 0
     tests = 0
-    for path in (ROOT / "tests" / "playwright").rglob("*.spec.js"):
-        specs += 1
-        source = path.read_text(encoding="utf-8", errors="ignore")
-        tests += len(re.findall(r"\btest\s*\(", source))
+    for spec_dir in PLAYWRIGHT_SPEC_DIRS:
+        for path in spec_dir.rglob("*.spec.js"):
+            specs += 1
+            source = path.read_text(encoding="utf-8", errors="ignore")
+            tests += len(re.findall(r"\btest\s*\(", source))
     return specs, tests
 
 

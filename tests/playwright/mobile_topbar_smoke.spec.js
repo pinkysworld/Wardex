@@ -48,7 +48,7 @@ test("mobile topbar more-menu smoke", async ({ page }) => {
   pageErrors.length = 0;
 
   await expect(
-    page.getByRole("heading", { name: "Security Overview" }),
+    page.getByRole("heading", { level: 2, name: "Dashboard", exact: true }),
   ).toBeVisible();
 
   const authBadge = page.locator(".auth-badge");

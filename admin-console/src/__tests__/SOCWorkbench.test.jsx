@@ -960,7 +960,7 @@ describe('SOCWorkbench', () => {
     const initialQueueStatsCalls = countCalls('/api/queue/stats');
     const initialWsStatsCalls = countCalls('/api/ws/stats');
 
-    fireEvent.click(within(queueCard).getByRole('button', { name: '↻ Refresh' }));
+    fireEvent.click(within(queueCard).getByRole('button', { name: 'Refresh' }));
 
     await waitFor(() => {
       expect(countCalls('/api/queue/alerts')).toBe(initialQueueCalls + 1);
@@ -1349,7 +1349,7 @@ describe('SOCWorkbench', () => {
     const initialStatsCalls = countResponseCalls('/api/response/stats');
     const initialSafetyCalls = countResponseCalls('/api/response/safety');
 
-    fireEvent.click(within(responseCallout).getByRole('button', { name: '↻ Refresh' }));
+    fireEvent.click(within(responseCallout).getByRole('button', { name: 'Refresh' }));
 
     await waitFor(() => {
       expect(countResponseCalls('/api/response/pending')).toBe(initialPendingCalls + 1);
@@ -1388,14 +1388,14 @@ describe('SOCWorkbench', () => {
     const initialPolicyCalls = countEscalationCalls('/api/escalation/policies');
     const initialActiveCalls = countEscalationCalls('/api/escalation/active');
 
-    fireEvent.click(within(activeCard).getByRole('button', { name: '↻ Refresh' }));
+    fireEvent.click(within(activeCard).getByRole('button', { name: 'Refresh' }));
 
     await waitFor(() => {
       expect(countEscalationCalls('/api/escalation/policies')).toBe(initialPolicyCalls + 1);
       expect(countEscalationCalls('/api/escalation/active')).toBe(initialActiveCalls + 1);
     });
 
-    fireEvent.click(within(policiesCard).getByRole('button', { name: '↻ Refresh' }));
+    fireEvent.click(within(policiesCard).getByRole('button', { name: 'Refresh' }));
 
     await waitFor(() => {
       expect(countEscalationCalls('/api/escalation/policies')).toBe(initialPolicyCalls + 2);
@@ -1524,7 +1524,7 @@ describe('SOCWorkbench', () => {
     expect(await screen.findByText('powershell.exe → rundll32.exe')).toBeInTheDocument();
     expect(currentLocation().hash).toBe('#process-tree');
 
-    fireEvent.click(within(findingsCard).getByRole('button', { name: '↻ Refresh' }));
+    fireEvent.click(within(findingsCard).getByRole('button', { name: 'Refresh' }));
 
     await waitFor(() => {
       expect(countProcessCalls('/api/processes/live')).toBe(initialLiveCalls + 1);
@@ -1533,7 +1533,7 @@ describe('SOCWorkbench', () => {
       expect(countProcessCalls('/api/process-tree/deep-chains')).toBe(initialDeepChainCalls + 1);
     });
 
-    fireEvent.click(within(liveCard).getByRole('button', { name: '↻ Refresh' }));
+    fireEvent.click(within(liveCard).getByRole('button', { name: 'Refresh' }));
 
     await waitFor(() => {
       expect(countProcessCalls('/api/processes/live')).toBe(initialLiveCalls + 2);
@@ -1566,7 +1566,7 @@ describe('SOCWorkbench', () => {
     const initialRbacCalls = countAdminCalls('/api/rbac/users');
     const initialCampaignCalls = countAdminCalls('/api/correlation/campaigns');
 
-    fireEvent.click(within(rbacCard).getByRole('button', { name: '↻ Refresh' }));
+    fireEvent.click(within(rbacCard).getByRole('button', { name: 'Refresh' }));
 
     await waitFor(() => {
       expect(countAdminCalls('/api/rbac/users')).toBe(initialRbacCalls + 1);
@@ -1606,7 +1606,7 @@ describe('SOCWorkbench', () => {
     expect(await screen.findByText('Edit: Credential Storm Playbook')).toBeInTheDocument();
     expect(await screen.findByDisplayValue('Reset compromised identities')).toBeInTheDocument();
 
-    fireEvent.click(screen.getByRole('button', { name: '▶ Run Playbook' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Run Playbook' }));
 
     await waitFor(() => {
       expect(tracker.playbookRunIds).toEqual(['credential-storm-playbook']);

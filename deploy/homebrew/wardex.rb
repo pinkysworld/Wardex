@@ -17,9 +17,13 @@ class Wardex < Formula
       system "npm", "ci", "--prefix", "admin-console"
     else
       ENV["WARDEX_SKIP_ADMIN_BUILD"] = "1"
-      ENV["CARGO_HOME"] = ENV.fetch("HOMEBREW_WARDEX_CARGO_HOME", "#{Dir.home}/.cargo")
+      toolchain_cargo_home = ENV.fetch("HOMEBREW_WARDEX_CARGO_HOME", "#{Dir.home}/.cargo")
       ENV["RUSTUP_HOME"] = ENV.fetch("HOMEBREW_WARDEX_RUSTUP_HOME", "#{Dir.home}/.rustup")
-      ENV.prepend_path "PATH", File.join(ENV["CARGO_HOME"], "bin")
+      ENV.prepend_path "PATH", File.join(toolchain_cargo_home, "bin")
+      # Homebrew builds cannot write to the invoking user's home, so keep
+      # cargo's registry and download cache inside the build tree; the
+      # toolchain itself is still read from the user's cargo/rustup homes.
+      ENV["CARGO_HOME"] = (buildpath/".cargo-home").to_s
 
       rustc_bin = ENV["HOMEBREW_WARDEX_RUSTC_BIN"]
       ENV["RUSTC"] = rustc_bin if rustc_bin.present?
@@ -33,10 +37,10 @@ class Wardex < Formula
     doc.install "README.md", "LICENSE"
   end
 
-  def post_install
-    (var/"wardex").mkpath
-    (var/"wardex/backups").mkpath
-    (var/"log/wardex").mkpath
+  post_install_steps do
+    mkdir_p "wardex", base: :var
+    mkdir_p "wardex/backups", base: :var
+    mkdir_p "log/wardex", base: :var
   end
 
   service do

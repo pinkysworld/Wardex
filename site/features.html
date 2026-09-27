@@ -20,10 +20,12 @@
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
     <link rel="icon" href="favicon.svg" type="image/svg+xml">
-    <link rel="stylesheet" href="styles.css?v=21">
-    <script defer src="app.js?v=21"></script>
+    <link rel="stylesheet" href="styles.css?v=23">
+    <script defer src="app.js?v=23"></script>
+    <noscript><style>.reveal{opacity:1!important;transform:none!important;}</style></noscript>
   </head>
   <body>
+    <a class="skip-link" href="#main-content">Skip to content</a>
     <nav class="site-nav" id="site-nav" data-shared-nav="true">
       <div class="nav-inner">
         <a class="nav-brand" href="index.html">
@@ -61,7 +63,7 @@
       </div>
     </nav>
 
-    <main class="main">
+    <main class="main" id="main-content">
       <!-- ── Page Hero ────────────────────────────────────────────────────── -->
       <section class="section page-hero">
         <div class="container">
@@ -107,7 +109,7 @@
               </div>
               <div class="feature-cell">
                 <h3>Kernel Event Bridge</h3>
-                <p>Process creation, file writes, DNS queries, and network connections flow through a unified schema on Linux (eBPF), macOS (EndpointSecurity), and Windows (ETW).</p>
+                <p>Process creation, file writes, DNS queries, and network connections flow through a unified schema on Linux (kernel event streams via process connector and fanotify), Windows (a real-time ETW consumer, requires an elevated agent process), and macOS (Endpoint Security Framework, opt-in build feature requiring Apple's entitlement). Every platform falls back to polling collection, and reports which mode is active, when the required privilege or entitlement isn't available.</p>
               </div>
               <div class="feature-cell">
                 <h3>MITRE ATT&amp;CK Coverage</h3>
@@ -408,7 +410,7 @@
               </div>
               <div class="feature-cell">
                 <h3>OpenAPI Contract</h3>
-                <p>Versioned OpenAPI spec tracked in-repo with 262 documented operations, SDK parity checks, and release verification endpoints.</p>
+                <p>Versioned OpenAPI spec tracked in-repo with 268 documented operations, SDK parity checks, and release verification endpoints.</p>
               </div>
               <div class="feature-cell">
                 <h3>Cloud Inventory Collectors</h3>

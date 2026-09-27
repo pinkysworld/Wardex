@@ -500,6 +500,431 @@ fn validate_range(
     Ok(())
 }
 
+// ── OTLP/HTTP exporter ───────────────────────────────────────────
+
+/// Configuration for exporting spans/logs/metrics to an OTLP/HTTP collector.
+///
+/// Follows the shape of the cloud collector configs: an `enabled` flag, a
+/// base endpoint, and serde defaults so existing configs without this
+/// section keep loading unchanged.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct OtlpExporterConfig {
+    /// Base collector URL, e.g. "http://otel-collector:4318". Signal paths
+    /// ("/v1/traces", "/v1/logs", "/v1/metrics") are appended.
+    #[serde(default)]
+    pub endpoint: String,
+    #[serde(default)]
+    pub enabled: bool,
+    /// Extra headers sent with every export request (e.g. an auth header).
+    #[serde(default)]
+    pub headers: std::collections::HashMap<String, String>,
+    /// Maximum spans/records batched into a single export request.
+    #[serde(default = "default_otlp_batch_size")]
+    pub batch_max_size: usize,
+    /// Maximum items buffered before new items are dropped.
+    #[serde(default = "default_otlp_queue_size")]
+    pub max_queue_size: usize,
+    /// Export attempts per batch before giving up.
+    #[serde(default = "default_otlp_max_retries")]
+    pub max_retries: u32,
+    /// Per-request timeout, in seconds.
+    #[serde(default = "default_otlp_timeout_secs")]
+    pub timeout_secs: u64,
+}
+
+fn default_otlp_batch_size() -> usize {
+    100
+}
+fn default_otlp_queue_size() -> usize {
+    10_000
+}
+fn default_otlp_max_retries() -> u32 {
+    3
+}
+fn default_otlp_timeout_secs() -> u64 {
+    10
+}
+
+impl Default for OtlpExporterConfig {
+    fn default() -> Self {
+        Self {
+            endpoint: String::new(),
+            enabled: false,
+            headers: std::collections::HashMap::new(),
+            batch_max_size: default_otlp_batch_size(),
+            max_queue_size: default_otlp_queue_size(),
+            max_retries: default_otlp_max_retries(),
+            timeout_secs: default_otlp_timeout_secs(),
+        }
+    }
+}
+
+/// Bounded-queue, batching OTLP/HTTP JSON exporter.
+///
+/// Spans (and arbitrary log/metric records) are enqueued cheaply from any
+/// call site; a caller periodically invokes `flush_traces`/`flush_logs`/
+/// `flush_metrics` (or `flush_all`) to batch-export and drain the queue,
+/// retrying transient failures with exponential backoff. When the queue is
+/// full, new items are dropped and counted so operators can see loss rather
+/// than have it happen silently.
+#[derive(Debug)]
+pub struct OtlpExporter {
+    config: OtlpExporterConfig,
+    trace_queue: std::sync::Mutex<std::collections::VecDeque<OtelSpan>>,
+    log_queue: std::sync::Mutex<std::collections::VecDeque<serde_json::Value>>,
+    metric_queue: std::sync::Mutex<std::collections::VecDeque<serde_json::Value>>,
+    dropped: AtomicU64,
+    exported: AtomicU64,
+    export_failures: AtomicU64,
+}
+
+/// Outcome of a single flush call.
+#[derive(Debug, Clone, Serialize)]
+pub struct OtlpFlushResult {
+    pub signal: &'static str,
+    pub attempted: usize,
+    pub exported: usize,
+    pub success: bool,
+    pub error: Option<String>,
+}
+
+/// Exporter counters for observability/health endpoints.
+#[derive(Debug, Clone, Serialize)]
+pub struct OtlpExporterStats {
+    pub enabled: bool,
+    pub queued_traces: usize,
+    pub queued_logs: usize,
+    pub queued_metrics: usize,
+    pub exported_total: u64,
+    pub dropped_total: u64,
+    pub export_failures_total: u64,
+}
+
+impl OtlpExporter {
+    pub fn new(config: OtlpExporterConfig) -> Self {
+        Self {
+            config,
+            trace_queue: std::sync::Mutex::new(std::collections::VecDeque::new()),
+            log_queue: std::sync::Mutex::new(std::collections::VecDeque::new()),
+            metric_queue: std::sync::Mutex::new(std::collections::VecDeque::new()),
+            dropped: AtomicU64::new(0),
+            exported: AtomicU64::new(0),
+            export_failures: AtomicU64::new(0),
+        }
+    }
+
+    pub fn is_enabled(&self) -> bool {
+        self.config.enabled && !self.config.endpoint.trim().is_empty()
+    }
+
+    fn enqueue<T>(
+        queue: &std::sync::Mutex<std::collections::VecDeque<T>>,
+        item: T,
+        cap: usize,
+        dropped: &AtomicU64,
+    ) {
+        if let Ok(mut q) = queue.lock() {
+            if q.len() >= cap {
+                q.pop_front();
+                dropped.fetch_add(1, Ordering::Relaxed);
+            }
+            q.push_back(item);
+        }
+    }
+
+    pub fn enqueue_span(&self, span: OtelSpan) {
+        if !self.is_enabled() {
+            return;
+        }
+        Self::enqueue(
+            &self.trace_queue,
+            span,
+            self.config.max_queue_size,
+            &self.dropped,
+        );
+    }
+
+    pub fn enqueue_log(&self, record: serde_json::Value) {
+        if !self.is_enabled() {
+            return;
+        }
+        Self::enqueue(
+            &self.log_queue,
+            record,
+            self.config.max_queue_size,
+            &self.dropped,
+        );
+    }
+
+    pub fn enqueue_metric(&self, record: serde_json::Value) {
+        if !self.is_enabled() {
+            return;
+        }
+        Self::enqueue(
+            &self.metric_queue,
+            record,
+            self.config.max_queue_size,
+            &self.dropped,
+        );
+    }
+
+    fn drain_batch<T>(
+        queue: &std::sync::Mutex<std::collections::VecDeque<T>>,
+        max: usize,
+    ) -> Vec<T> {
+        let mut out = Vec::new();
+        if let Ok(mut q) = queue.lock() {
+            for _ in 0..max {
+                match q.pop_front() {
+                    Some(item) => out.push(item),
+                    None => break,
+                }
+            }
+        }
+        out
+    }
+
+    fn post_with_retry(&self, url: &str, body: &serde_json::Value) -> Result<(), String> {
+        let mut last_err = String::new();
+        for attempt in 0..self.config.max_retries.max(1) {
+            let mut req = ureq::post(url)
+                .set("Content-Type", "application/json")
+                .timeout(std::time::Duration::from_secs(self.config.timeout_secs));
+            for (k, v) in &self.config.headers {
+                req = req.set(k, v);
+            }
+            match req.send_string(&body.to_string()) {
+                Ok(resp) if (200..300).contains(&resp.status()) => return Ok(()),
+                Ok(resp) => {
+                    last_err = format!("OTLP export got HTTP {}", resp.status());
+                }
+                Err(e) => {
+                    last_err = format!("OTLP export request failed: {e}");
+                }
+            }
+            if attempt + 1 < self.config.max_retries {
+                std::thread::sleep(std::time::Duration::from_millis(
+                    100 * 2u64.saturating_pow(attempt),
+                ));
+            }
+        }
+        Err(last_err)
+    }
+
+    /// Flush queued spans as a single OTLP/HTTP JSON batch to `{endpoint}/v1/traces`.
+    pub fn flush_traces(&self) -> OtlpFlushResult {
+        if !self.is_enabled() {
+            return OtlpFlushResult {
+                signal: "traces",
+                attempted: 0,
+                exported: 0,
+                success: true,
+                error: None,
+            };
+        }
+        let batch = Self::drain_batch(&self.trace_queue, self.config.batch_max_size);
+        let attempted = batch.len();
+        if batch.is_empty() {
+            return OtlpFlushResult {
+                signal: "traces",
+                attempted: 0,
+                exported: 0,
+                success: true,
+                error: None,
+            };
+        }
+        let spans_json: Vec<serde_json::Value> = batch
+            .iter()
+            .map(|span| {
+                span.to_otlp_json()["resourceSpans"][0]["scopeSpans"][0]["spans"][0].clone()
+            })
+            .collect();
+        let service_name = batch
+            .first()
+            .map(|s| s.service_name.clone())
+            .unwrap_or_else(|| "wardex".to_string());
+        let payload = serde_json::json!({
+            "resourceSpans": [{
+                "resource": { "attributes": [
+                    {"key": "service.name", "value": {"stringValue": service_name}},
+                ]},
+                "scopeSpans": [{ "spans": spans_json }],
+            }]
+        });
+        let url = format!("{}/v1/traces", self.config.endpoint.trim_end_matches('/'));
+        match self.post_with_retry(&url, &payload) {
+            Ok(()) => {
+                self.exported.fetch_add(attempted as u64, Ordering::Relaxed);
+                OtlpFlushResult {
+                    signal: "traces",
+                    attempted,
+                    exported: attempted,
+                    success: true,
+                    error: None,
+                }
+            }
+            Err(e) => {
+                self.export_failures.fetch_add(1, Ordering::Relaxed);
+                OtlpFlushResult {
+                    signal: "traces",
+                    attempted,
+                    exported: 0,
+                    success: false,
+                    error: Some(e),
+                }
+            }
+        }
+    }
+
+    /// Flush queued log records as OTLP/HTTP JSON to `{endpoint}/v1/logs`.
+    ///
+    /// Records are caller-supplied JSON objects; at minimum they should
+    /// carry a `body`/`message` and `severityText` field, which are mapped
+    /// into the OTLP log record shape best-effort.
+    pub fn flush_logs(&self) -> OtlpFlushResult {
+        if !self.is_enabled() {
+            return OtlpFlushResult {
+                signal: "logs",
+                attempted: 0,
+                exported: 0,
+                success: true,
+                error: None,
+            };
+        }
+        let batch = Self::drain_batch(&self.log_queue, self.config.batch_max_size);
+        let attempted = batch.len();
+        if batch.is_empty() {
+            return OtlpFlushResult {
+                signal: "logs",
+                attempted: 0,
+                exported: 0,
+                success: true,
+                error: None,
+            };
+        }
+        let log_records: Vec<serde_json::Value> = batch
+            .into_iter()
+            .map(|record| {
+                let body = record
+                    .get("message")
+                    .or_else(|| record.get("body"))
+                    .cloned()
+                    .unwrap_or(record.clone());
+                serde_json::json!({
+                    "timeUnixNano": chrono::Utc::now().timestamp_nanos_opt().unwrap_or(0),
+                    "severityText": record.get("level").and_then(|v| v.as_str()).unwrap_or("INFO"),
+                    "body": {"stringValue": body.to_string()},
+                    "attributes": [],
+                })
+            })
+            .collect();
+        let payload = serde_json::json!({
+            "resourceLogs": [{
+                "resource": { "attributes": [
+                    {"key": "service.name", "value": {"stringValue": "wardex"}},
+                ]},
+                "scopeLogs": [{ "logRecords": log_records }],
+            }]
+        });
+        let url = format!("{}/v1/logs", self.config.endpoint.trim_end_matches('/'));
+        match self.post_with_retry(&url, &payload) {
+            Ok(()) => {
+                self.exported.fetch_add(attempted as u64, Ordering::Relaxed);
+                OtlpFlushResult {
+                    signal: "logs",
+                    attempted,
+                    exported: attempted,
+                    success: true,
+                    error: None,
+                }
+            }
+            Err(e) => {
+                self.export_failures.fetch_add(1, Ordering::Relaxed);
+                OtlpFlushResult {
+                    signal: "logs",
+                    attempted,
+                    exported: 0,
+                    success: false,
+                    error: Some(e),
+                }
+            }
+        }
+    }
+
+    /// Flush queued metric data points as OTLP/HTTP JSON to `{endpoint}/v1/metrics`.
+    /// Each queued record is expected to already be a valid OTLP metric object.
+    pub fn flush_metrics(&self) -> OtlpFlushResult {
+        if !self.is_enabled() {
+            return OtlpFlushResult {
+                signal: "metrics",
+                attempted: 0,
+                exported: 0,
+                success: true,
+                error: None,
+            };
+        }
+        let batch = Self::drain_batch(&self.metric_queue, self.config.batch_max_size);
+        let attempted = batch.len();
+        if batch.is_empty() {
+            return OtlpFlushResult {
+                signal: "metrics",
+                attempted: 0,
+                exported: 0,
+                success: true,
+                error: None,
+            };
+        }
+        let payload = serde_json::json!({
+            "resourceMetrics": [{
+                "resource": { "attributes": [
+                    {"key": "service.name", "value": {"stringValue": "wardex"}},
+                ]},
+                "scopeMetrics": [{ "metrics": batch }],
+            }]
+        });
+        let url = format!("{}/v1/metrics", self.config.endpoint.trim_end_matches('/'));
+        match self.post_with_retry(&url, &payload) {
+            Ok(()) => {
+                self.exported.fetch_add(attempted as u64, Ordering::Relaxed);
+                OtlpFlushResult {
+                    signal: "metrics",
+                    attempted,
+                    exported: attempted,
+                    success: true,
+                    error: None,
+                }
+            }
+            Err(e) => {
+                self.export_failures.fetch_add(1, Ordering::Relaxed);
+                OtlpFlushResult {
+                    signal: "metrics",
+                    attempted,
+                    exported: 0,
+                    success: false,
+                    error: Some(e),
+                }
+            }
+        }
+    }
+
+    /// Flush all three signal queues; returns one result per signal.
+    pub fn flush_all(&self) -> Vec<OtlpFlushResult> {
+        vec![self.flush_traces(), self.flush_logs(), self.flush_metrics()]
+    }
+
+    pub fn stats(&self) -> OtlpExporterStats {
+        OtlpExporterStats {
+            enabled: self.is_enabled(),
+            queued_traces: self.trace_queue.lock().map(|q| q.len()).unwrap_or(0),
+            queued_logs: self.log_queue.lock().map(|q| q.len()).unwrap_or(0),
+            queued_metrics: self.metric_queue.lock().map(|q| q.len()).unwrap_or(0),
+            exported_total: self.exported.load(Ordering::Relaxed),
+            dropped_total: self.dropped.load(Ordering::Relaxed),
+            export_failures_total: self.export_failures.load(Ordering::Relaxed),
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::TelemetrySample;
@@ -645,5 +1070,151 @@ mod tests {
         assert_eq!(stats.total_spans, 2);
         assert_eq!(stats.error_spans, 1);
         assert!(stats.avg_duration_ms >= 0.0);
+    }
+
+    // ── OTLP exporter tests ─────────────────────────────────────
+
+    use std::io::{Read, Write};
+    use std::net::TcpListener;
+    use std::sync::Arc;
+    use std::sync::atomic::{AtomicUsize, Ordering as AtomicOrdering};
+
+    /// Mock collector endpoint that records how many requests it received
+    /// and always answers with the given status.
+    fn spawn_mock_collector(status_line: &'static str) -> (String, Arc<AtomicUsize>) {
+        let listener = TcpListener::bind("127.0.0.1:0").expect("bind mock collector");
+        let port = listener.local_addr().expect("addr").port();
+        let hits = Arc::new(AtomicUsize::new(0));
+        let hits_thread = hits.clone();
+        std::thread::spawn(move || {
+            for stream in listener.incoming() {
+                let mut stream = match stream {
+                    Ok(s) => s,
+                    Err(_) => break,
+                };
+                let mut buf = [0u8; 8192];
+                let mut received = Vec::new();
+                // Read the full request, body included: closing a socket with
+                // unread data makes macOS/BSD send RST, so the client would
+                // see "connection reset" instead of this response.
+                loop {
+                    let n = stream.read(&mut buf).unwrap_or(0);
+                    if n == 0 {
+                        break;
+                    }
+                    received.extend_from_slice(&buf[..n]);
+                    let Some(header_end) = received.windows(4).position(|w| w == b"\r\n\r\n")
+                    else {
+                        continue;
+                    };
+                    let headers =
+                        String::from_utf8_lossy(&received[..header_end]).to_ascii_lowercase();
+                    let content_length = headers
+                        .lines()
+                        .find_map(|line| line.strip_prefix("content-length:"))
+                        .and_then(|value| value.trim().parse::<usize>().ok())
+                        .unwrap_or(0);
+                    if received.len() >= header_end + 4 + content_length {
+                        break;
+                    }
+                }
+                hits_thread.fetch_add(1, AtomicOrdering::SeqCst);
+                let body = "{}";
+                let response = format!(
+                    "{status_line}\r\nContent-Type: application/json\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{body}",
+                    body.len()
+                );
+                let _ = stream.write_all(response.as_bytes());
+                let _ = stream.flush();
+            }
+        });
+        (format!("http://127.0.0.1:{port}"), hits)
+    }
+
+    #[test]
+    fn otlp_exporter_disabled_is_a_noop() {
+        let exporter = super::OtlpExporter::new(super::OtlpExporterConfig::default());
+        let mut span = super::OtelSpan::new("noop");
+        span.finish();
+        exporter.enqueue_span(span);
+        assert_eq!(exporter.stats().queued_traces, 0);
+        let result = exporter.flush_traces();
+        assert!(result.success);
+        assert_eq!(result.attempted, 0);
+    }
+
+    #[test]
+    fn otlp_exporter_exports_batched_spans() {
+        let (endpoint, hits) = spawn_mock_collector("HTTP/1.1 200 OK");
+        let exporter = super::OtlpExporter::new(super::OtlpExporterConfig {
+            endpoint,
+            enabled: true,
+            max_retries: 1,
+            ..Default::default()
+        });
+        for i in 0..3 {
+            let mut span = super::OtelSpan::new(&format!("op{i}"));
+            span.finish();
+            exporter.enqueue_span(span);
+        }
+        assert_eq!(exporter.stats().queued_traces, 3);
+        let result = exporter.flush_traces();
+        assert!(result.success);
+        assert_eq!(result.exported, 3);
+        assert_eq!(exporter.stats().queued_traces, 0);
+        assert_eq!(exporter.stats().exported_total, 3);
+        assert_eq!(hits.load(AtomicOrdering::SeqCst), 1);
+    }
+
+    #[test]
+    fn otlp_exporter_retries_then_fails_and_counts_failure() {
+        let (endpoint, hits) = spawn_mock_collector("HTTP/1.1 500 Internal Server Error");
+        let exporter = super::OtlpExporter::new(super::OtlpExporterConfig {
+            endpoint,
+            enabled: true,
+            max_retries: 2,
+            ..Default::default()
+        });
+        let mut span = super::OtelSpan::new("will-fail");
+        span.finish();
+        exporter.enqueue_span(span);
+        let result = exporter.flush_traces();
+        assert!(!result.success);
+        assert_eq!(exporter.stats().export_failures_total, 1);
+        // One request per retry attempt.
+        assert_eq!(hits.load(AtomicOrdering::SeqCst), 2);
+    }
+
+    #[test]
+    fn otlp_exporter_bounded_queue_drops_and_counts() {
+        let exporter = super::OtlpExporter::new(super::OtlpExporterConfig {
+            endpoint: "http://127.0.0.1:1".into(),
+            enabled: true,
+            max_queue_size: 2,
+            ..Default::default()
+        });
+        for i in 0..5 {
+            let mut span = super::OtelSpan::new(&format!("op{i}"));
+            span.finish();
+            exporter.enqueue_span(span);
+        }
+        assert_eq!(exporter.stats().queued_traces, 2);
+        assert_eq!(exporter.stats().dropped_total, 3);
+    }
+
+    #[test]
+    fn otlp_exporter_flushes_logs_and_metrics() {
+        let (endpoint, hits) = spawn_mock_collector("HTTP/1.1 200 OK");
+        let exporter = super::OtlpExporter::new(super::OtlpExporterConfig {
+            endpoint,
+            enabled: true,
+            max_retries: 1,
+            ..Default::default()
+        });
+        exporter.enqueue_log(serde_json::json!({"level": "INFO", "message": "hello"}));
+        exporter.enqueue_metric(serde_json::json!({"name": "wardex.alerts", "value": 1}));
+        let results = exporter.flush_all();
+        assert!(results.iter().all(|r| r.success));
+        assert_eq!(hits.load(AtomicOrdering::SeqCst), 2); // logs + metrics (traces queue was empty)
     }
 }

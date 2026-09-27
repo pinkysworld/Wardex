@@ -17,6 +17,10 @@ pub struct GcpCollectorConfig {
     /// Service account email.
     pub service_account_email: String,
     /// Path to the service account JSON key file (local only).
+    ///
+    /// Accepts the documented `service_account_key_path` name as an alias
+    /// so existing `[collector.gcp]` config examples parse unchanged.
+    #[serde(alias = "service_account_key_path")]
     pub key_file_path: Option<String>,
     /// Pre-loaded private key PEM (alternative to key_file_path).
     #[serde(skip_serializing)]

@@ -307,7 +307,7 @@ mod tests {
 
     #[test]
     fn benchmark_10k_samples() {
-        use rand::Rng;
+        use rand::RngExt;
 
         let mut rng = rand::rng();
         let anomaly_rate = 0.05; // 5% anomaly injection

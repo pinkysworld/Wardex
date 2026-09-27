@@ -320,7 +320,7 @@ test('queue and insight refresh actions re-fetch grouped SOC endpoints', async (
   const initialQueueStats = counts.queueStats;
   const initialWsStats = counts.wsStats;
 
-  await queueCard.getByRole('button', { name: '↻ Refresh' }).click();
+  await queueCard.getByRole('button', { name: 'Refresh' }).click();
 
   await expect.poll(() => counts.queue).toBe(initialQueue + 1);
   await expect.poll(() => counts.queueStats).toBe(initialQueueStats + 1);
@@ -336,7 +336,7 @@ test('queue and insight refresh actions re-fetch grouped SOC endpoints', async (
   const initialEfficacy = counts.efficacy;
   const initialTimeline = counts.timeline;
 
-  await efficacyCard.getByRole('button', { name: '↻ Refresh' }).click();
+  await efficacyCard.getByRole('button', { name: 'Refresh' }).click();
 
   await expect.poll(() => counts.efficacy).toBe(initialEfficacy + 1);
   await expect.poll(() => counts.timeline).toBe(initialTimeline + 1);
@@ -347,7 +347,7 @@ test('queue and insight refresh actions re-fetch grouped SOC endpoints', async (
   await expect(timelineCard).toBeVisible();
   await expect(page.getByText('Suspicious PowerShell launched')).toBeVisible();
 
-  await timelineCard.getByRole('button', { name: '↻ Refresh' }).click();
+  await timelineCard.getByRole('button', { name: 'Refresh' }).click();
 
   await expect.poll(() => counts.efficacy).toBe(initialEfficacy + 2);
   await expect.poll(() => counts.timeline).toBe(initialTimeline + 2);

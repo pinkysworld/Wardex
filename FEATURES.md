@@ -55,7 +55,7 @@ Wardex is a self-hosted XDR and SIEM platform built in Rust for teams that want 
 
 - **Malware detection & AV scanning**
   - In-memory malware hash database with ~48 built-in SHA256/MD5 signatures across 7 families
-  - YARA-based file scanning with 30 community rules (Emotet, Cobalt Strike, Mimikatz, WannaCry, etc.)
+  - YARA-based file scanning with 30 community rules (Emotet, Cobalt Strike, Mimikatz, WannaCry, etc.), plus a genuine `.yar` source compiler (`docs/YARA_COMPATIBILITY.md`) for a documented subset: text/hex/regex strings with nocase/wide/ascii/fullword modifiers, hex wildcards/jumps/alternatives, and full condition expressions (and/or/not, `#`/`@`/`at`/`in`, `of`, `filesize`, `uint8/16/32(+be)`, rule references)
   - Combined verdict engine: hash lookup + YARA match → malicious/suspicious/clean classification
   - Bulk signature import (JSON/CSV) and custom YARA rule creation via API
 
@@ -71,7 +71,7 @@ Wardex is a self-hosted XDR and SIEM platform built in Rust for teams that want 
 
 - **Observability & analytics**
   - API usage analytics with per-endpoint request tracking, latency percentiles (p95), and error rates
-  - OpenTelemetry-compatible tracing with span hierarchy, OTLP JSON export, and trace statistics
+  - OpenTelemetry-compatible tracing with span hierarchy, trace statistics, and a real OTLP/HTTP JSON exporter (batched, retried with backoff, bounded queue with a drop counter) for traces/logs/metrics
   - Backup encryption with AES-256-GCM and passphrase-derived keys
   - Production assurance APIs for release provenance, upgrade rehearsal, synthetic console monitoring, incident replay, retention forecast, adversarial validation, and support bundle diffing
   - Release verification APIs for clean release cut readiness, container parity, data quality, scale baseline, failover execution, secrets rotation, task automation, and detection validation packs
@@ -86,16 +86,18 @@ Wardex is a self-hosted XDR and SIEM platform built in Rust for teams that want 
   - Centralised secrets management: env-var expansion, file-based secrets, HashiCorp Vault KV v2 with caching
 
 - **Research and AI**
-  - Federated learning with convergence loop and differential privacy
+  - Cross-agent federated learning: coordinator/participant round protocol over the authenticated agent↔server HTTP channel, FedAvg aggregation of a logistic-regression triage model, per-round L2-norm clipping with Gaussian (ε, δ)-differential-privacy noise, per-agent cumulative privacy-budget enforcement, convergence detection, and admin start/stop/status/rounds APIs (see `docs/FEDERATED_LEARNING.md`; secure aggregation against the coordinator itself is not implemented — the coordinator sees each agent's individual noised update)
   - Deception engine with randomised canary deployment and attacker behavior profiling
   - Privacy-preserving forensics with 4 redaction levels and ZK proofs
   - LLM-assisted security analyst with RAG pipeline (OpenAI/Azure/Anthropic/Ollama), conversation history, and citation generation
   - Gradient-boosted alert-triage classifier (real multiclass gradient boosting) with Random Forest shadow comparison and calibrated confidence
 
 - **Integrations and evidence**
-  - Structured SIEM output, OCSF normalization, TAXII pull, and threat-intel enrichment
+  - Structured SIEM output, OCSF normalization, TAXII pull, and threat-intel enrichment (VirusTotal v3 file/IP/domain/URL reports and AbuseIPDB v2 IP reputation, with per-provider rate limiting, TTL caching, and an on-demand lookup API)
+  - Real Jira (Cloud/Server REST v2) and ServiceNow (Table API) ticketing clients: idempotent create/update, comments, transitions, and bidirectional status pull, layered on the existing case-sync bookkeeping
+  - Okta identity collector: polls `/api/v1/logs` with SSWS auth, persisted `after`-cursor pagination via Link headers, and rate-limit header handling
   - Compliance evidence, forensic exports, tamper-evident audit chain, and encrypted event spooling
-  - Outbound notifications to Slack, Teams, PagerDuty, Webhook, and Email (real SMTP delivery with retry) with severity filtering
+  - Outbound notifications to Slack, Teams, PagerDuty, Webhook, and Email (real SMTP delivery with STARTTLS/implicit TLS, AUTH PLAIN/LOGIN, and retry) with severity filtering
   - CycloneDX 1.5 and SPDX 2.3 SBOM generation from Cargo.lock for supply-chain compliance
   - Runbooks, OpenAPI contract, deployment models, disaster recovery guidance, and production hardening docs
   - Python SDK with production assurance, cursor-page, preflight, snapshot, and release-proof helpers
@@ -110,7 +112,7 @@ Wardex is a self-hosted XDR and SIEM platform built in Rust for teams that want 
   - Real OS enforcement execution with command safety filter and dry-run mode
   - Atomic agent update with SHA-256 verification, automatic rollback, and state tracking
   - Alert deduplication with time-window grouping and cross-device merge
-  - YARA-style pattern matching engine with built-in threat rules
+  - YARA-style pattern matching engine with built-in threat rules and a real `.yar` source compiler for a documented rule-language subset
   - Multi-tenancy isolation guards with cross-tenant access control
   - Real mesh networking with checksummed frames, hop limits, and peer state tracking
   - Dashboard deep-linking and timeline visualization
@@ -120,13 +122,17 @@ Wardex is a self-hosted XDR and SIEM platform built in Rust for teams that want 
   - Data archival with real gzip compression (flate2), CSV export, and SHA-256 manifests
   - 210 Sigma detection rules across 22 categories (including cloud-native)
   - ClickHouse storage adapter with buffered batch inserts, MergeTree DDL, and materialized views
-  - ML triage engine with 5-tree Random Forest ensemble for true-positive/false-positive/needs-review classification
+  - ML triage engine: Random Forest trained with a real Gini-impurity CART learner and bootstrap bagging over analyst-labelled alert feedback (out-of-bag accuracy/precision/recall/confusion-matrix/feature-importance metrics, persisted to storage), falling back to a pretrained cold-start forest until at least 50 labelled true/false-positive verdicts exist; retrain and status via `POST /api/ml/train` / `GET /api/ml/train/status`
   - HA cluster snapshots with log compaction and persistent Raft state schema
   - OIDC/SAML SSO with session management (config, login, callback, session, logout)
   - Cloud collectors for AWS CloudTrail (SigV4), Azure Activity Log (OAuth2), and GCP Audit Log (JWT/RS256) with live polling
+  - Real-time Linux kernel telemetry: `CN_PROC` netlink process connector for exec/fork/exit/uid-change events, fanotify/inotify for file activity, with automatic capability-aware fallback to `/proc` polling (see `docs/kernel-telemetry-linux.md`)
+  - Real-time Windows ETW telemetry: a native consumer (`ferrisetw`) for `Microsoft-Windows-Kernel-Process`/`-Kernel-File`/`-Kernel-Network` (process/image-load/file/network events), plus DNS-Client and PowerShell ScriptBlock logging (event 4104), with automatic fallback to WMI/PowerShell/`reg.exe` polling when not elevated (see `docs/runbooks/windows-agent.md`)
+  - AMSI telemetry via the `Microsoft-Antimalware-Scan-Interface` ETW provider (scan verdicts from whichever AMSI provider — typically Defender — is installed); implementing an actual AMSI *provider* (a registered COM DLL) is out of scope and documented as such
+  - Real macOS Endpoint Security Framework client behind the off-by-default `macos-es` cargo feature (needs Apple's `com.apple.developer.endpoint-security.client` entitlement, a signed binary, root, and TCC Full Disk Access — none of which a default build requires or is affected by), with automatic fallback to `ps`/`lsof` polling (see `docs/runbooks/macos-agent.md`)
   - Collector lifecycle history with last-success/error checkpoints, retry/backoff context, freshness, failure-streak analytics, and 24h ingestion counters
   - Collector ingestion evidence with SOC Workbench and Infrastructure pivots for cloud, identity, and SaaS lanes
-  - Full-text search index with Tantivy persistent event store, query parsing, and faceted results
+  - Full-text search index backed by a real Tantivy engine: mmap'd on-disk index (schema: DATE fast/sort field + STRING keyword fields for device/process/IP/user with substring+wildcard matching via compiled regex queries, TEXT fields for message/cmdline), incremental single-writer/shared-reader indexing on event ingest, bounded commit batching, retention-aligned range deletion, and automatic schema-version-aware rebuild-from-storage on corruption. The existing KQL-like hunt DSL (`field:value`, `AND`/`OR`/`NOT`, parentheses, wildcards, pipe aggregations) compiles directly to Tantivy `BooleanQuery`/`RegexQuery`/`RangeQuery`; only the pipe-aggregation group-by/min/max/distinct step runs over the (Tantivy-narrowed) candidate set in-process, since Tantivy has no generic group-by collector for arbitrary stored fields
   - SigmaHQ YAML rule import from the community repository
   - Usage metering with plan limits and overage calculation
   - Billing engine with subscription management and invoice generation

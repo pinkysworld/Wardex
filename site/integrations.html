@@ -20,10 +20,12 @@
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
     <link rel="icon" href="favicon.svg" type="image/svg+xml">
-    <link rel="stylesheet" href="styles.css?v=21">
-    <script defer src="app.js?v=21"></script>
+    <link rel="stylesheet" href="styles.css?v=23">
+    <script defer src="app.js?v=23"></script>
+    <noscript><style>.reveal{opacity:1!important;transform:none!important;}</style></noscript>
   </head>
   <body>
+    <a class="skip-link" href="#main-content">Skip to content</a>
     <nav class="site-nav" id="site-nav" data-shared-nav="true">
       <div class="nav-inner">
         <a class="nav-brand" href="index.html">
@@ -61,7 +63,7 @@
       </div>
     </nav>
 
-    <main class="main">
+    <main class="main" id="main-content">
       <section class="section page-hero">
         <div class="container">
           <p class="label">Integrations</p>
@@ -94,7 +96,7 @@
             <h2>Keep the ticket of record honest</h2>
           </div>
           <div class="integrations-grid">
-            <div class="integration-card"><h3>Jira</h3><span class="integration-status status-ok">Built-in</span><p>Create/update issues with bidirectional state sync and custom-field mapping.</p></div>
+            <div class="integration-card"><h3>Jira</h3><span class="integration-status status-ok">Built-in</span><p>Create/update issues (Cloud or Server, basic-auth or PAT) with bidirectional status pull.</p></div>
             <div class="integration-card"><h3>ServiceNow</h3><span class="integration-status status-ok">Built-in</span><p>Table API connector for Security Incident Response.</p></div>
             <div class="integration-card"><h3>GitHub Issues</h3><span class="integration-status status-ok">Built-in</span><p>For small teams running internal tracking in GitHub.</p></div>
             <div class="integration-card"><h3>Linear</h3><span class="integration-status status-planned">Planned</span><p>GraphQL mutations with project/team mapping.</p></div>

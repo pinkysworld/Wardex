@@ -91,7 +91,7 @@ test('advanced admin console workflows smoke', async ({ page }) => {
   const sidebar = page.locator('#sidebar-nav');
 
   await sidebar.getByRole('link', { name: 'Dashboard', exact: true }).click();
-  await expect(page.getByRole('heading', { name: 'Security Overview' })).toBeVisible();
+  await expect(page.getByRole('heading', { level: 2, name: 'Dashboard', exact: true })).toBeVisible();
 
   await page.goto(`${BASE}/admin/detection-lab`, { waitUntil: 'domcontentloaded' });
   await expect(page.getByRole('heading', { name: 'Detection Lab' })).toBeVisible();
@@ -125,7 +125,10 @@ test('advanced admin console workflows smoke', async ({ page }) => {
   await page.goto(`${BASE}/admin/soc`, { waitUntil: 'domcontentloaded' });
   await expect(page.getByText('Workbench Overview')).toBeVisible();
   await expect(page.getByText('Investigations In Flight')).toBeVisible();
-  await page.getByRole('button', { name: 'Response', exact: true }).click();
+  await page
+    .getByRole('main', { name: 'Main content' })
+    .getByRole('button', { name: 'Response', exact: true })
+    .click();
   await expect(page.getByText('Pending Responses', { exact: true })).toBeVisible();
   await expect(page.getByText('Response Stats', { exact: true })).toBeVisible();
   await expect(page.getByText('Response Requests', { exact: true })).toBeVisible();

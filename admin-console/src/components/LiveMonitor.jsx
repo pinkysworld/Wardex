@@ -6,6 +6,7 @@ import AlertDrawer from './AlertDrawer.jsx';
 import ProcessDrawer from './ProcessDrawer.jsx';
 import { JsonDetails, SummaryGrid } from './operator.jsx';
 import { downloadCsv, downloadData, formatDateTime, formatRelativeTime } from './operatorUtils.js';
+import { IconChevronDown, IconRefresh } from './icons.jsx';
 
 const ALERT_VIEWS = [
   {
@@ -1201,7 +1202,8 @@ export default function LiveMonitor() {
             alerts
           </span>
           <button className="btn btn-sm" onClick={reloadAll}>
-            ↻ Refresh
+            <IconRefresh size={14} />
+            Refresh
           </button>
         </div>
       </div>
@@ -2165,7 +2167,8 @@ export default function LiveMonitor() {
               <span className="card-title">Running Processes</span>
               <div className="btn-group">
                 <button className="btn btn-sm" onClick={reloadProcessData}>
-                  ↻ Refresh
+                  <IconRefresh size={14} />
+                  Refresh
                 </button>
                 <button className="btn btn-sm" onClick={() => exportProcesses('json')}>
                   Export JSON
@@ -2240,13 +2243,19 @@ export default function LiveMonitor() {
                   className={`btn btn-sm ${procSort === s ? 'btn-primary' : ''}`}
                   onClick={() => setProcSort(s)}
                 >
-                  {s === 'cpu'
-                    ? 'CPU ↓'
-                    : s === 'mem'
-                      ? 'Memory ↓'
-                      : s === 'name'
-                        ? 'Name A-Z'
-                        : 'PID'}
+                  {s === 'cpu' ? (
+                    <>
+                      CPU <IconChevronDown size={11} />
+                    </>
+                  ) : s === 'mem' ? (
+                    <>
+                      Memory <IconChevronDown size={11} />
+                    </>
+                  ) : s === 'name' ? (
+                    'Name A-Z'
+                  ) : (
+                    'PID'
+                  )}
                 </button>
               ))}
               <input
@@ -2451,19 +2460,19 @@ export default function LiveMonitor() {
                   >
                     <tr>
                       <th style={{ cursor: 'pointer' }} onClick={() => setProcSort('pid')}>
-                        PID{procSort === 'pid' ? ' ↓' : ''}
+                        PID{procSort === 'pid' && <IconChevronDown size={11} />}
                       </th>
                       <th>PPID</th>
                       <th style={{ cursor: 'pointer' }} onClick={() => setProcSort('name')}>
-                        Name{procSort === 'name' ? ' ↓' : ''}
+                        Name{procSort === 'name' && <IconChevronDown size={11} />}
                       </th>
                       <th>User</th>
                       <th>Group</th>
                       <th style={{ cursor: 'pointer' }} onClick={() => setProcSort('cpu')}>
-                        CPU %{procSort === 'cpu' ? ' ↓' : ''}
+                        CPU %{procSort === 'cpu' && <IconChevronDown size={11} />}
                       </th>
                       <th style={{ cursor: 'pointer' }} onClick={() => setProcSort('mem')}>
-                        Mem %{procSort === 'mem' ? ' ↓' : ''}
+                        Mem %{procSort === 'mem' && <IconChevronDown size={11} />}
                       </th>
                       <th>Actions</th>
                     </tr>

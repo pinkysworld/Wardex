@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import * as api from '../api.js';
 import { copyTextToClipboard } from './clipboard.js';
 import { safeStorageGet, safeStorageRemove, safeStorageSet } from '../safeStorage.js';
+import { IconCheck, IconCircle } from './icons.jsx';
 
 const ROLES = ['viewer', 'analyst', 'admin'];
 const FEEDS = ['Abuse.ch MalwareBazaar', 'CIRCL MISP (TAXII)', 'Custom URL feed'];
@@ -58,7 +59,7 @@ function ChecklistItem({ label, complete, helper, actionLabel, onAction, busy, a
   return (
     <div className={`onboarding-checklist-item ${complete ? 'complete' : ''}`}>
       <div className="onboarding-checklist-mark" aria-hidden="true">
-        {complete ? '✓' : '○'}
+        {complete ? <IconCheck size={14} /> : <IconCircle size={14} />}
       </div>
       <div className="onboarding-checklist-copy">
         <div className="onboarding-checklist-label">{label}</div>

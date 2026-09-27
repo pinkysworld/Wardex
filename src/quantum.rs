@@ -68,7 +68,7 @@ pub struct LamportSignature {
 impl LamportPrivateKey {
     /// Generate a new Lamport private key using the system RNG.
     pub fn generate() -> Self {
-        use rand::Rng;
+        use rand::RngExt;
         let mut rng = rand::rng();
         let key_id = hex::encode((0..8).map(|_| rng.random::<u8>()).collect::<Vec<_>>());
         let pairs: Vec<(String, String)> = (0..256)
@@ -563,7 +563,7 @@ impl Drop for MlDsaKeyPair {
 impl MlDsaKeyPair {
     /// Generate a new ML-DSA-65 keypair from fresh random entropy.
     pub fn generate() -> Self {
-        use rand::Rng;
+        use rand::RngExt;
         let mut rng = rand::rng();
         let seed_bytes: [u8; 32] = rng.random();
         Self::from_seed_bytes(&seed_bytes)

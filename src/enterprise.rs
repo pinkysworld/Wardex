@@ -879,6 +879,26 @@ pub struct TicketSyncRecord {
     pub synced_by: String,
     pub synced_at: String,
     pub sync_count: u32,
+    /// Deep link to the ticket in the remote provider's UI, when a real
+    /// Jira/ServiceNow client created or updated it. `None` for bookkeeping
+    /// created before the remote clients existed, or when no ticketing
+    /// provider is configured/enabled.
+    #[serde(default)]
+    pub external_url: Option<String>,
+    /// Last known remote status/state string, refreshed by `POST
+    /// /api/tickets/pull` (the bidirectional pull side of the sync).
+    #[serde(default)]
+    pub remote_status: Option<String>,
+    /// When the remote status was last pulled.
+    #[serde(default)]
+    pub last_pulled_at: Option<String>,
+    /// Error message from the most recent failed remote sync attempt, when
+    /// `status` is `"failed"`. A configured provider that returns an error
+    /// (auth failure, network error, 4xx/5xx) must not fabricate a synthetic
+    /// external key: that would make later retries PATCH/comment against a
+    /// remote id that was never created. `None` once a sync has succeeded.
+    #[serde(default)]
+    pub last_error: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

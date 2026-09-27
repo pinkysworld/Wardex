@@ -7,6 +7,7 @@ import { useConfirm } from './useConfirm.jsx';
 import { useCollectorForm } from './useCollectorForm.js';
 import { downloadData } from './operatorUtils.js';
 import { formatApiError } from '../utils/errors.js';
+import { IconCheck, IconClose, IconRefresh } from './icons.jsx';
 import {
   AUDIT_PAGE_SIZE,
   AUDIT_METHOD_OPTIONS,
@@ -1226,7 +1227,14 @@ export default function Settings() {
                   >
                     <span style={{ fontFamily: 'var(--font-mono)', fontSize: 12 }}>{k}:</span>
                     <span style={{ marginLeft: 8, fontSize: 13 }}>
-                      {typeof v === 'boolean' ? (v ? '✓ active' : '✗ inactive') : String(v)}
+                      {typeof v === 'boolean' ? (
+                        <>
+                          {v ? <IconCheck size={12} /> : <IconClose size={12} />}{' '}
+                          {v ? 'active' : 'inactive'}
+                        </>
+                      ) : (
+                        String(v)
+                      )}
                     </span>
                   </div>
                 ))}
@@ -2047,7 +2055,8 @@ export default function Settings() {
             <div className="card-header">
               <span className="card-title">Cloud Collectors &amp; Secrets</span>
               <button className="btn btn-sm" type="button" onClick={() => rIntegrations()}>
-                ↻ Refresh
+                <IconRefresh size={14} />
+                Refresh
               </button>
             </div>
             <div
@@ -3249,7 +3258,8 @@ export default function Settings() {
                     : 'Not Configured'}
                 </span>
                 <button className="btn btn-sm" onClick={refreshAdminRetentionWorkspace}>
-                  ↻ Refresh
+                  <IconRefresh size={14} />
+                  Refresh
                 </button>
               </div>
             </div>
@@ -3529,7 +3539,8 @@ export default function Settings() {
                     : auditRangeLabel(auditLogPage)}
                 </span>
                 <button className="btn btn-sm" disabled={auditLogLoading} onClick={rAuditLog}>
-                  ↻ Refresh
+                  <IconRefresh size={14} />
+                  Refresh
                 </button>
               </div>
             </div>

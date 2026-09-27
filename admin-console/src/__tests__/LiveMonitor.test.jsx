@@ -461,7 +461,7 @@ describe('LiveMonitor', () => {
     const initialAlertCounts = callCounts.alertCounts;
     const initialAlertGroups = callCounts.alertGroups;
 
-    await user.click(screen.getByRole('button', { name: '↻ Refresh' }));
+    await user.click(screen.getByRole('button', { name: 'Refresh' }));
 
     await waitFor(() => {
       expect(callCounts.alerts).toBe(initialAlerts + 1);
@@ -482,7 +482,7 @@ describe('LiveMonitor', () => {
     expect(await screen.findByText('Process Graph Context')).toBeInTheDocument();
     expect(screen.getByText('sshd · sshd -> bash -> curl')).toBeInTheDocument();
 
-    await user.click(within(processCard).getByRole('button', { name: '↻ Refresh' }));
+    await user.click(within(processCard).getByRole('button', { name: 'Refresh' }));
 
     await waitFor(() => {
       expect(callCounts.processLive).toBe(initialProcessLive + 1);
@@ -597,7 +597,7 @@ describe('LiveMonitor', () => {
     renderMonitor('/monitor?monitorTab=processes');
 
     await screen.findByText('sshd');
-    const refreshButton = screen.getAllByRole('button', { name: '↻ Refresh' })[0];
+    const refreshButton = screen.getAllByRole('button', { name: 'Refresh' })[0];
     const processCard = screen.getByText('All Processes').closest('.card');
     const processTable = await waitFor(() => {
       const table = processCard?.querySelector('.table-wrap');

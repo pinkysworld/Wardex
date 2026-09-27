@@ -861,4 +861,61 @@ pub(super) fn register(builder: OpenApiBuilder) -> OpenApiBuilder {
                 "Policy payload",
             ),
         )
+        // Federated learning (R27)
+        .path(
+            "/api/federation/start",
+            "post",
+            op_post_optional(
+                "startFederation",
+                "Start (or restart) a federated-learning round-robin across enrolled agents",
+                &["federation"],
+                "Optional federation config override",
+            ),
+        )
+        .path(
+            "/api/federation/stop",
+            "post",
+            op_post_without_body(
+                "stopFederation",
+                "Stop the running federation; the in-progress round's submissions are discarded",
+                &["federation"],
+            ),
+        )
+        .path(
+            "/api/federation/status",
+            "get",
+            op(
+                "getFederationStatus",
+                "Federation coordinator status: model version, current round, and per-agent privacy budget spend",
+                &["federation"],
+            ),
+        )
+        .path(
+            "/api/federation/rounds",
+            "get",
+            op(
+                "listFederationRounds",
+                "Completed federated-learning rounds plus the round currently open",
+                &["federation"],
+            ),
+        )
+        .path(
+            "/api/federation/round",
+            "get",
+            op(
+                "fetchFederationRound",
+                "Agent: fetch the currently open federation round (global params + hyperparameters)",
+                &["federation"],
+            ),
+        )
+        .path(
+            "/api/federation/round/submit",
+            "post",
+            op_post(
+                "submitFederationUpdate",
+                "Agent: submit a clipped, differentially-private local model update for a round",
+                &["federation"],
+                "Round id, noised weight-delta vector, sample count, and training loss",
+            ),
+        )
 }

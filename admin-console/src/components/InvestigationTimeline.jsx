@@ -1,6 +1,13 @@
 import { useState, useMemo, useCallback } from 'react';
 import { useApi, useInterval } from '../hooks.jsx';
 import * as api from '../api.js';
+import {
+  IconChevronDown,
+  IconChevronRight,
+  IconRefresh,
+  IconZoomIn,
+  IconZoomOut,
+} from './icons.jsx';
 
 /**
  * InvestigationTimeline — visual timeline of alert/incident events
@@ -33,7 +40,9 @@ function TimelineEvent({ event, expanded, onToggle }) {
           <span className="timeline-summary">
             {event.message || event.summary || event.description || '—'}
           </span>
-          <span className="timeline-chevron">{expanded ? '▾' : '▸'}</span>
+          <span className="timeline-chevron">
+            {expanded ? <IconChevronDown size={13} /> : <IconChevronRight size={13} />}
+          </span>
         </button>
         {expanded && (
           <div className="timeline-detail">
@@ -346,14 +355,29 @@ export default function InvestigationTimeline() {
         </label>
 
         <div className="btn-group" style={{ marginLeft: 4 }}>
-          <button className="btn btn-sm" onClick={zoomIn} title="Zoom in (fewer events)">
-            🔍+
+          <button
+            className="btn btn-sm"
+            onClick={zoomIn}
+            title="Zoom in (fewer events)"
+            aria-label="Zoom in (fewer events)"
+          >
+            <IconZoomIn size={14} />
           </button>
-          <button className="btn btn-sm" onClick={zoomOut} title="Zoom out (more events)">
-            🔍−
+          <button
+            className="btn btn-sm"
+            onClick={zoomOut}
+            title="Zoom out (more events)"
+            aria-label="Zoom out (more events)"
+          >
+            <IconZoomOut size={14} />
           </button>
-          <button className="btn btn-sm" onClick={resetZoom} title="Reset zoom">
-            ↺
+          <button
+            className="btn btn-sm"
+            onClick={resetZoom}
+            title="Reset zoom"
+            aria-label="Reset zoom"
+          >
+            <IconRefresh size={14} />
           </button>
         </div>
 

@@ -5,6 +5,7 @@ import { JsonDetails, SideDrawer, SummaryGrid } from './operator.jsx';
 import { downloadData, formatDateTime, formatLabel } from './operatorUtils.js';
 import { freshnessStatusBadge } from './operatorTrustUtils.js';
 import AlertNarrative from './AlertNarrative.jsx';
+import { IconChevronDown, IconChevronRight } from './icons.jsx';
 
 /* ── MITRE + investigation helpers ──────────────────────────── */
 
@@ -1158,7 +1159,8 @@ export default function AlertDrawer({
             gap: 6,
           }}
         >
-          {explainOpen ? '▾' : '▸'} Explain this Alert
+          {explainOpen ? <IconChevronDown size={13} /> : <IconChevronRight size={13} />} Explain
+          this Alert
         </button>
         {explainOpen && (
           <div style={{ marginTop: 12 }}>

@@ -5,7 +5,6 @@ from __future__ import annotations
 import json
 
 import pytest
-
 from wardex import (
     AuthenticationError,
     CommandCenterLaneResponse,
@@ -16,7 +15,6 @@ from wardex import (
     WardexClient,
     WardexError,
 )
-
 
 BASE = "http://localhost:9077"
 
@@ -361,7 +359,7 @@ def test_auth_check_and_rotate_token(monkeypatch):
     rotated = client.rotate_token()
     assert rotated["new_token"] == "new-tok"
     assert client._token == "new-tok"
-    assert calls[1]["kwargs"]["headers"] if "headers" in calls[1]["kwargs"] else True
+    assert calls[1]["kwargs"].get("headers", True)
 
 
 def test_login_is_explicitly_unsupported():

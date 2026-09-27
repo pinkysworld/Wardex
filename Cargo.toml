@@ -10,13 +10,13 @@ license = "AGPL-3.0-only"
 [dependencies]
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
-toml = "0.8"
+toml = "1"
 sha2 = "0.11"
-md5 = "0.7"
-aes-gcm = "0.10"
+md5 = "0.8"
+aes-gcm = "0.11"
 hex = "0.4"
 chrono = { version = "0.4", features = ["serde"] }
-rand = "0.9"
+rand = "0.10"
 ureq = { version = "2", default-features = false, features = ["json"] }
 ctrlc = "3"
 rusqlite = { version = "0.40", features = ["bundled"] }
@@ -24,7 +24,7 @@ notify = "8"
 flate2 = "1"
 log = "0.4"
 env_logger = "0.11"
-ed25519-dalek = { version = "2", features = ["rand_core"] }
+ed25519-dalek = { version = "3", features = ["rand_core"] }
 base64 = "0.22"
 include_dir = "0.7"
 jsonwebtoken = { version = "10.4", features = ["rust_crypto"] }
@@ -44,12 +44,68 @@ tantivy = "0.26"
 # present via several crypto crates; pinning a direct dependency lets us apply
 # it explicitly to long-lived secret fields (ML-DSA seed, transient API tokens).
 zeroize = { version = "1.8", features = ["zeroize_derive"] }
+# Pure-Rust regex strings for the YARA-subset engine (bytes API, no libyara).
+regex = "1"
+
+# Direct use of the TLS stack `ureq`'s `tls` feature already pulls in, for
+# SMTP STARTTLS/implicit-TLS (see `notifications::smtp_send`). No new TLS
+# dependency: this reuses the rustls/webpki-roots versions ureq resolves.
+# Optional, and only enabled by the `tls` feature below, so building without
+# `tls` doesn't pull in a TLS stack this crate no longer needs.
+rustls = { version = "0.23", default-features = false, features = ["std", "ring", "tls12"], optional = true }
+rustls-pki-types = { version = "1", optional = true }
+webpki-roots = { version = "0.26", optional = true }
+wasmi = "2.0.0"
+
+# Linux-only kernel telemetry backends: CN_PROC (process connector) netlink
+# socket, and fanotify/inotify for file events. Both crates provide safe
+# wrappers over the raw syscalls (all `unsafe` stays inside the dependency),
+# which keeps this crate's `unsafe_code = "forbid"` lint intact. Neither
+# crate compiles cleanly on non-Linux targets, so they are gated here rather
+# than pulled in unconditionally.
+[target.'cfg(target_os = "linux")'.dependencies]
+nix = { version = "0.31.3", features = ["net", "socket", "fanotify", "inotify", "poll", "user", "fs"] }
+netlink-sys = "0.9.0"
+# netlink-sys's Socket::recv_from is generic over bytes::BufMut; used directly
+# in src/kernel_linux/netlink_proc.rs.
+bytes = "1"
+
+# Windows-only real-time ETW (Event Tracing for Windows) consumer. `ferrisetw`
+# is a safe wrapper over the ETW consumer APIs (MIT OR Apache-2.0, allowed by
+# deny.toml); all `unsafe` stays inside the dependency, keeping this crate's
+# `unsafe_code = "forbid"` lint intact. See src/kernel_windows/etw_consumer.rs.
+[target.'cfg(windows)'.dependencies]
+ferrisetw = "1.2"
+
+# macOS-only Endpoint Security Framework client, behind the off-by-default
+# `macos-es` feature (requires the `com.apple.developer.endpoint-security.client`
+# entitlement and a signed binary/system extension to actually run — see
+# docs/runbooks/macos-agent.md). `endpoint-sec` is MIT OR Apache-2.0-licensed
+# and wraps `endpoint-sec-sys`, which links against the system
+# `libEndpointSecurity`; both stay out of the default build entirely since
+# they are target-gated here, independent of the feature flag.
+[target.'cfg(target_os = "macos")'.dependencies]
+endpoint-sec = { version = "0.6", optional = true }
 
 [features]
 # TLS is on by default: the platform's outbound integrations (threat feeds,
 # AWS/Azure/GCP collectors, OIDC discovery, webhooks) all require HTTPS.
 default = ["tls"]
-tls = ["ureq/tls"]
+tls = ["ureq/tls", "dep:rustls", "dep:rustls-pki-types", "dep:webpki-roots"]
+# Optional, OFF by default: planned real eBPF backend (CO-RE via aya). Not
+# implemented yet — see src/kernel_linux/mod.rs and
+# docs/kernel-telemetry-linux.md for why (BPF object compilation needs
+# nightly + bpf-linker, which this repo's pinned stable toolchain and
+# release pipeline cannot support). The feature exists only to reserve the
+# seam (`KernelBackendKind::Ebpf`, `EventSource::EbpfLinux`) so a future
+# change can land without another public API break.
+ebpf = []
+# Optional, OFF by default: macOS Endpoint Security Framework client (real
+# process/file event subscription). Requires the
+# `com.apple.developer.endpoint-security.client` entitlement from Apple and a
+# signed binary/system extension, which cannot be arranged or tested in this
+# environment. See src/kernel_macos/ and docs/runbooks/macos-agent.md.
+macos-es = ["dep:endpoint-sec"]
 
 [lib]
 # The crate currently has no Rust doctest examples, and `rustdoc --test`
@@ -60,6 +116,10 @@ doctest = false
 [dev-dependencies]
 criterion = { version = "0.5", default-features = false, features = ["cargo_bench_support"] }
 tempfile = "3"
+# Test-only: generates a self-signed certificate for the SMTP STARTTLS test's
+# fake TLS server. Not used by any production code path.
+rcgen = { version = "0.13", default-features = false, features = ["ring", "pem"] }
+wat = "1.259.0"
 
 [[bench]]
 name = "pipeline"

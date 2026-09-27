@@ -1160,6 +1160,148 @@ pub(super) fn handle_policy_vm_execute(
     json_response(&info.to_string(), 200)
 }
 
+// ── WebAssembly extension runtime ───────────────────────────────────────
+
+pub(super) fn handle_wasm_extensions_list(state: &Arc<Mutex<AppState>>) -> Response<Body> {
+    let s = state
+        .lock()
+        .unwrap_or_else(std::sync::PoisonError::into_inner);
+    let extensions = s.wasm_extensions.list();
+    let metrics = s.wasm_extensions.metrics();
+    let entries: Vec<serde_json::Value> = extensions
+        .into_iter()
+        .map(|o| {
+            let m = metrics.get(&o.name).cloned().unwrap_or_default();
+            serde_json::json!({
+                "name": o.name,
+                "sha256": o.sha256,
+                "metrics": m,
+            })
+        })
+        .collect();
+    let info = serde_json::json!({
+        "enabled": s.wasm_extensions.config().enabled,
+        "extensions_dir": s.wasm_extensions.config().extensions_dir,
+        "extensions": entries,
+    });
+    json_response(&info.to_string(), 200)
+}
+
+pub(super) fn handle_wasm_extensions_upload(
+    body: &[u8],
+    state: &Arc<Mutex<AppState>>,
+) -> Response<Body> {
+    let body = match read_body_limited(body, 4 * 1024 * 1024) {
+        Ok(b) => b,
+        Err(e) => return error_json(&e, 400),
+    };
+    #[derive(serde::Deserialize)]
+    struct UploadReq {
+        name: String,
+        /// Base64-encoded raw `.wasm` module bytes.
+        wasm_base64: String,
+        /// Hex-encoded SHA-256 of the raw module bytes (hash pinning).
+        #[serde(default)]
+        sha256: String,
+        /// Base64-encoded Ed25519 signature over the raw module bytes.
+        #[serde(default)]
+        signature: Option<String>,
+        /// Base64-encoded Ed25519 public key that produced `signature`.
+        #[serde(default)]
+        signer_pubkey: Option<String>,
+    }
+    let req: UploadReq = match serde_json::from_str(&body) {
+        Ok(r) => r,
+        Err(e) => return error_json(&format!("invalid JSON: {e}"), 400),
+    };
+    if req.name.is_empty() || req.name.contains(['/', '\\', '.']) {
+        return error_json("name must be non-empty and contain no path separators", 400);
+    }
+    let wasm_bytes = {
+        use base64::Engine as _;
+        match base64::engine::general_purpose::STANDARD.decode(&req.wasm_base64) {
+            Ok(b) => b,
+            Err(e) => return error_json(&format!("invalid base64 in wasm_base64: {e}"), 400),
+        }
+    };
+
+    let s = state
+        .lock()
+        .unwrap_or_else(std::sync::PoisonError::into_inner);
+    let settings = s.wasm_extensions.config().clone();
+    let sha256 = match crate::wasm_runtime::verify_upload(
+        &wasm_bytes,
+        &req.sha256,
+        req.signature.as_deref(),
+        req.signer_pubkey.as_deref(),
+        &settings,
+    ) {
+        Ok(sha) => sha,
+        Err(e) => return error_json(&format!("upload rejected: {e}"), 400),
+    };
+    match s.wasm_extensions.load_bytes(&req.name, &wasm_bytes) {
+        Ok(outcome) => {
+            let info = serde_json::json!({
+                "name": outcome.name,
+                "sha256": sha256,
+            });
+            json_response(&info.to_string(), 200)
+        }
+        Err(e) => error_json(&format!("extension rejected: {e}"), 400),
+    }
+}
+
+pub(super) fn handle_wasm_extensions_delete(
+    name: &str,
+    state: &Arc<Mutex<AppState>>,
+) -> Response<Body> {
+    let s = state
+        .lock()
+        .unwrap_or_else(std::sync::PoisonError::into_inner);
+    if s.wasm_extensions.remove(name) {
+        json_response(r#"{"status":"removed"}"#, 200)
+    } else {
+        error_json("no such extension", 404)
+    }
+}
+
+pub(super) fn handle_wasm_extensions_run(
+    body: &[u8],
+    state: &Arc<Mutex<AppState>>,
+) -> Response<Body> {
+    let body = match read_body_limited(body, 1024 * 1024) {
+        Ok(b) => b,
+        Err(e) => return error_json(&e, 400),
+    };
+    #[derive(serde::Deserialize)]
+    struct RunReq {
+        #[serde(default = "serde_json::Value::default")]
+        event: serde_json::Value,
+    }
+    let req: RunReq = match serde_json::from_str(&body) {
+        Ok(r) => r,
+        Err(e) => return error_json(&format!("invalid JSON: {e}"), 400),
+    };
+    let s = state
+        .lock()
+        .unwrap_or_else(std::sync::PoisonError::into_inner);
+    let alerts = s.wasm_extensions.run_on_event(&req.event);
+    let out: Vec<serde_json::Value> = alerts
+        .into_iter()
+        .map(|(name, alert)| {
+            serde_json::json!({
+                "extension": name,
+                "severity": alert.severity,
+                "title": alert.title,
+                "mitre_technique": alert.mitre_technique,
+                "fields": alert.fields,
+            })
+        })
+        .collect();
+    let info = serde_json::json!({ "alerts": out });
+    json_response(&info.to_string(), 200)
+}
+
 pub(super) fn handle_deception_deploy(body: &[u8], state: &Arc<Mutex<AppState>>) -> Response<Body> {
     let body = match read_body_limited(body, 10 * 1024 * 1024) {
         Ok(b) => b,
@@ -1388,6 +1530,23 @@ pub(super) fn handle_event_ingest(body: &[u8], state: &Arc<Mutex<AppState>>) -> 
         })
         .sum();
     let result = s.event_store.ingest(&batch);
+    // Feed the newly ingested events into the persistent search index
+    // incrementally (never a full rebuild), then commit opportunistically.
+    {
+        let stored = s.event_store.all_events();
+        let start = stored.len().saturating_sub(result.ingested);
+        let new_fields: Vec<HashMap<String, String>> = stored[start..]
+            .iter()
+            .map(crate::server::event_to_search_fields)
+            .collect();
+        if !new_fields.is_empty() {
+            if let Err(e) = s.search_index.ingest(&new_fields) {
+                log::warn!("[SEARCH] failed to index ingested events: {e}");
+            } else if let Err(e) = s.search_index.maybe_commit() {
+                log::warn!("[SEARCH] failed to commit search index: {e}");
+            }
+        }
+    }
     // Dual-write to ClickHouse when configured
     if let Some(ref ch) = s.clickhouse_store {
         let ch_events: Vec<crate::storage_clickhouse::StoredEvent> = batch

@@ -1,12 +1,12 @@
 {
   "counts": {
     "admin_console_tests": 328,
-    "openapi_operations": 262,
-    "playwright_specs": 7,
-    "playwright_tests": 8,
-    "rust_modules": 174,
-    "rust_tests": 1836,
-    "total_automated_checks": 2172
+    "openapi_operations": 268,
+    "playwright_specs": 16,
+    "playwright_tests": 34,
+    "rust_modules": 196,
+    "rust_tests": 2028,
+    "total_automated_checks": 2390
   },
   "distribution": {
     "apt_repo": "https://pinkysworld.github.io/Wardex/apt",

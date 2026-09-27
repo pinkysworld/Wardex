@@ -20,6 +20,7 @@ jobs:
   release-preflight:
     name: Release Preflight
     runs-on: ubuntu-latest
+    timeout-minutes: 30
     steps:
       - name: Checkout
         uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
@@ -97,6 +98,7 @@ jobs:
     name: Build & Package — ${{ matrix.platform }}
     needs: [release-preflight]
     runs-on: ${{ matrix.os }}
+    timeout-minutes: 60
     strategy:
       fail-fast: false
       matrix:
@@ -228,6 +230,7 @@ jobs:
     name: Generate SBOM
     needs: [release-preflight]
     runs-on: ubuntu-latest
+    timeout-minutes: 20
     steps:
       - name: Checkout
         uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
@@ -254,12 +257,13 @@ jobs:
     name: Helm Chart Lint
     needs: [release-preflight]
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     steps:
       - name: Checkout
         uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
 
       - name: Install Helm
-        uses: azure/setup-helm@dda3372f752e03dde6b3237bc9431cdc2f7a02a2 # v5
+        uses: azure/setup-helm@9bc31f4ebc9c6b171d7bfbaa5d006ae7abdb4310 # v5.0.1
         with:
           version: latest
 
@@ -271,6 +275,7 @@ jobs:
     name: Build Linux Packages (deb/rpm)
     needs: [build]
     runs-on: ubuntu-latest
+    timeout-minutes: 60
     steps:
       - name: Checkout
         uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
@@ -349,6 +354,7 @@ jobs:
     name: Linux Package Install Smoke
     needs: [linux-packages]
     runs-on: ubuntu-latest
+    timeout-minutes: 60
     steps:
       - name: Download deb package
         uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8
@@ -374,6 +380,7 @@ jobs:
     name: Container Image Scan
     needs: [release-preflight]
     runs-on: ubuntu-latest
+    timeout-minutes: 60
     steps:
       - name: Checkout
         uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
@@ -399,6 +406,7 @@ jobs:
     name: Push & Sign Container Image
     needs: [container-scan]
     runs-on: ubuntu-latest
+    timeout-minutes: 60
     steps:
       - name: Checkout
         uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
@@ -455,6 +463,7 @@ jobs:
     name: Publish GitHub Release
     needs: [build, sbom, helm-lint, linux-packages, linux-package-smoke]
     runs-on: ubuntu-latest
+    timeout-minutes: 20
     if: success()
 
     steps:
@@ -506,7 +515,7 @@ jobs:
           cat release_notes.md
 
       - name: Create GitHub Release
-        uses: softprops/action-gh-release@b4309332981a82ec1c5618f44dd2e27cc8bfbfda # v3.0.0
+        uses: softprops/action-gh-release@718ea10b132b3b2eba29c1007bb80653f286566b # v3.0.1
         with:
           name: "Wardex ${{ github.ref_name }}"
           body_path: release_notes.md
@@ -520,6 +529,7 @@ jobs:
     name: Sync Distribution Channels
     needs: [release]
     runs-on: ubuntu-latest
+    timeout-minutes: 20
     if: success()
 
     steps:
@@ -555,6 +565,7 @@ jobs:
     name: Published Artifact Smoke — ${{ matrix.label }}
     needs: [release]
     runs-on: ${{ matrix.os }}
+    timeout-minutes: 60
     if: success()
     strategy:
       fail-fast: false
@@ -616,6 +627,7 @@ jobs:
     name: Published Artifact Smoke — github-windows-archive
     needs: [release]
     runs-on: windows-latest
+    timeout-minutes: 60
     if: success()
     steps:
       - name: Checkout
@@ -645,6 +657,7 @@ jobs:
     name: Published Distribution Proof
     needs: [container-push, published-release-smoke, published-release-smoke-windows, sync-release-distribution]
     runs-on: ubuntu-latest
+    timeout-minutes: 60
     if: success()
     steps:
       - name: Checkout
@@ -711,6 +724,7 @@ jobs:
     name: Published Homebrew Proof
     needs: [published-distribution-proof]
     runs-on: macos-latest
+    timeout-minutes: 60
     if: success()
     env:
       HOMEBREW_NO_AUTO_UPDATE: "1"

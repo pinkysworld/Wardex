@@ -96,7 +96,7 @@ Each track should be read through three lenses:
 - **R17 Wasm-Based Extensible Detection and Response Policies** — **Implemented foundation**
   - Research idea: let users ship custom detection or response logic as sandboxed Wasm modules.
   - Why it matters: it opens the project to extension without requiring forks of the core runtime.
-  - Current repo state: PolicyVm with typed opcode set (LoadVar, StoreResult, Add, Mul, Cmp, JumpIf, Halt), program execution with step tracking, and execute API endpoint. Admin console WASM VM panel wired.
+  - Current repo state: real WebAssembly extension runtime (`src/wasm_runtime.rs`) on the pure-Rust `wasmi` interpreter — fuel-metered CPU budget, memory-page limits via `ResourceLimiter`, load-time import/export/size validation, a versioned `wardex_v1` host ABI (log, emit_alert, kv_get/kv_set, now_unix_ms), directory and signed-upload loading, and per-extension metrics exposed via `/api/wasm-extensions` and `wardex doctor`. See `docs/WASM_ABI.md` and `docs/WASM_TUTORIAL.md`. The older `PolicyVm` bytecode interpreter (typed opcode set: LoadVar, StoreResult, Add, Mul, Cmp, JumpIf, Halt) remains for its one existing caller, `POST /api/policy-vm/execute`, but is not WebAssembly and is considered legacy.
 - **R18 Energy-Proportional Model Quantization with Verifiability** — **Implemented foundation**
   - Research idea: adjust model precision to save energy, while proving the detector stayed within an acceptable accuracy envelope.
   - Why it matters: edge deployments often need to trade precision for power without losing trust in the result.

@@ -1044,7 +1044,7 @@ fn analyst_flow_links_queue_case_incident_and_response_actions() {
         .set("Authorization", &auth_header(&token))
         .send_json(serde_json::json!({
             "action": "kill_process",
-            "pid": 9001,
+            "pid": 4_194_305,
             "process_name": "analyst-flow.bin",
             "hostname": "analyst-flow-host",
             "reason": "end-to-end analyst flow",
@@ -1089,8 +1089,10 @@ fn analyst_flow_links_queue_case_incident_and_response_actions() {
         .expect("response requests")
         .into_json()
         .unwrap();
-    // PID 9001 on `analyst-flow-host` is not present on the test node, so the
-    // node-local enforcer honestly reports failure rather than a fabricated
+    // PID 4194305 is above Linux's PID_MAX_LIMIT (2^22), above macOS's pid
+    // range, and not a multiple of 4 (Windows PIDs always are), so it can
+    // never exist on the test node — the node-local enforcer honestly
+    // reports failure rather than a fabricated
     // success. The flow itself (approve → execute → status transition) is
     // exercised end-to-end; "Failed" is the truthful terminal state.
     assert_eq!(

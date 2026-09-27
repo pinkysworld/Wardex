@@ -5,9 +5,7 @@ from __future__ import annotations
 import os
 
 import pytest
-
 from wardex import WardexClient
-
 
 LIVE_BASE = os.environ.get("WDX_BASE_URL") or os.environ.get("WARDEX_LIVE_BASE_URL")
 LIVE_API_KEY = os.environ.get("WDX_API_KEY") or os.environ.get("WARDEX_LIVE_API_KEY")

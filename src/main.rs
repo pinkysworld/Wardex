@@ -360,6 +360,49 @@ async fn run() -> Result<(), String> {
                 }
             );
         }
+        "attest-verify" => {
+            let config = load_or_create_config();
+            let manifest_path = args
+                .next()
+                .map(PathBuf::from)
+                .filter(|p| !p.as_os_str().is_empty())
+                .or_else(|| {
+                    (!config.attestation.manifest_path.is_empty())
+                        .then(|| PathBuf::from(&config.attestation.manifest_path))
+                })
+                .ok_or_else(|| {
+                    "missing manifest path (pass one, or set [attestation].manifest_path)"
+                        .to_string()
+                })?;
+            let trust_store_path = args
+                .next()
+                .map(PathBuf::from)
+                .filter(|p| !p.as_os_str().is_empty())
+                .or_else(|| {
+                    (!config.attestation.trust_store_path.is_empty())
+                        .then(|| PathBuf::from(&config.attestation.trust_store_path))
+                })
+                .ok_or_else(|| {
+                    "missing trust store path (pass one, or set [attestation].trust_store_path)"
+                        .to_string()
+                })?;
+
+            let manifest = wardex::attestation::BuildManifest::load(&manifest_path)?;
+            let trust_store = wardex::attestation::TrustStore::load(&trust_store_path)?;
+            let result = wardex::attestation::verify_manifest(&manifest, &trust_store);
+            for check in &result.checks {
+                println!(
+                    "[{}] {}: {}",
+                    if check.passed { "PASS" } else { "FAIL" },
+                    check.name,
+                    check.detail
+                );
+            }
+            if !result.passed {
+                return Err("attestation verification failed".into());
+            }
+            println!("Attestation verification passed.");
+        }
         "bench" => {
             let benign_path = args
                 .next()
@@ -596,6 +639,7 @@ fn print_usage() {
     println!("  harness                            Run adversarial harness");
     println!("  export-model <tla|alloy> [path]    Export formal model");
     println!("  attest <binary> [manifest] [...]   Generate build manifest");
+    println!("  attest-verify [manifest] [trust-store]  Verify a manifest against a trust store");
     println!("  bench <benign> <attack> [thresh]   Benchmark detectors");
     println!("  version                            Print Wardex version and exit");
     println!("  help                               Show this message");

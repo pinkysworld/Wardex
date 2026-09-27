@@ -2531,25 +2531,57 @@ pub(super) fn handle_dynamic_api_route(
                         );
                     }
                 };
-                let events = {
+                let search_index = {
                     let s = state
                         .lock()
                         .unwrap_or_else(std::sync::PoisonError::into_inner);
-                    s.event_store.all_events().to_vec()
+                    Arc::clone(&s.search_index)
                 };
-                match build_search_index_from_events(&events) {
-                    Ok(idx) => match idx.search(&query) {
-                        Ok(result) => {
-                            let body = serde_json::to_string(&result).unwrap_or_default();
-                            json_response(&body, 200)
-                        }
-                        Err(e) => error_json(&format!("search failed: {e}"), 500),
-                    },
-                    Err(e) => error_json(&format!("search index unavailable: {e}"), 500),
+                match search_index.search(&query) {
+                    Ok(result) => {
+                        let body = serde_json::to_string(&result).unwrap_or_default();
+                        json_response(&body, 200)
+                    }
+                    Err(e) => error_json(&format!("search failed: {e}"), 500),
                 }
             }
             Err(e) => error_json(&e, 400),
         }
+
+    // ── Search index maintenance ───────────────────────────
+    } else if method == Method::Post && url_path == "/api/search/rebuild" {
+        let (search_index, events) = {
+            let s = state
+                .lock()
+                .unwrap_or_else(std::sync::PoisonError::into_inner);
+            (
+                Arc::clone(&s.search_index),
+                s.event_store.all_events().to_vec(),
+            )
+        };
+        let fields: Vec<HashMap<String, String>> = events
+            .iter()
+            .map(crate::server::event_to_search_fields)
+            .collect();
+        match search_index.rebuild_from(&fields) {
+            Ok(total) => {
+                let body = serde_json::json!({
+                    "rebuilt": true,
+                    "total_documents": total,
+                });
+                json_response(&body.to_string(), 200)
+            }
+            Err(e) => error_json(&format!("search index rebuild failed: {e}"), 500),
+        }
+    } else if method == Method::Get && url_path == "/api/search/status" {
+        let search_index = {
+            let s = state
+                .lock()
+                .unwrap_or_else(std::sync::PoisonError::into_inner);
+            Arc::clone(&s.search_index)
+        };
+        let body = serde_json::to_string(&search_index.stats()).unwrap_or_default();
+        json_response(&body, 200)
 
     // ── Metering ──────────────────────────────────────────
     } else if method == Method::Get && url_path == "/api/metering/usage" {
@@ -3139,6 +3171,10 @@ pub(super) fn handle_dynamic_api_route(
         crate::server_ml::handle_ml_triage(body, state)
     } else if method == Method::Post && url_path == "/api/ml/triage/v2" {
         crate::server_ml::handle_ml_triage_v2(body, state)
+    } else if method == Method::Post && url_path == "/api/ml/train" {
+        crate::server_ml::handle_ml_train(state)
+    } else if method == Method::Get && url_path == "/api/ml/train/status" {
+        crate::server_ml::handle_ml_train_status(state)
 
     // ── Vulnerability Scanner ─────────────────────────────────
     } else if method == Method::Get && url_path == "/api/vulnerability/scan" {
@@ -3904,34 +3940,29 @@ pub(super) fn handle_dynamic_api_route(
                 if query.is_empty() {
                     return error_json("query cannot be empty", 400);
                 }
-                let events = {
+                let search_index = {
                     let s = state
                         .lock()
                         .unwrap_or_else(std::sync::PoisonError::into_inner);
-                    s.event_store.all_events().to_vec()
+                    Arc::clone(&s.search_index)
                 };
-                match build_search_index_from_events(&events) {
-                    Ok(idx) => {
-                        // Support pipe aggregation syntax
-                        if query.contains('|') {
-                            match idx.hunt_aggregate(query) {
-                                Ok(result) => {
-                                    let body = serde_json::to_string(&result).unwrap_or_default();
-                                    json_response(&body, 200)
-                                }
-                                Err(e) => error_json(&e, 400),
-                            }
-                        } else {
-                            match idx.hunt(query) {
-                                Ok(result) => {
-                                    let body = serde_json::to_string(&result).unwrap_or_default();
-                                    json_response(&body, 200)
-                                }
-                                Err(e) => error_json(&e, 400),
-                            }
+                // Support pipe aggregation syntax
+                if query.contains('|') {
+                    match search_index.hunt_aggregate(query) {
+                        Ok(result) => {
+                            let body = serde_json::to_string(&result).unwrap_or_default();
+                            json_response(&body, 200)
                         }
+                        Err(e) => error_json(&e, 400),
                     }
-                    Err(e) => error_json(&format!("search index unavailable: {e}"), 500),
+                } else {
+                    match search_index.hunt(query) {
+                        Ok(result) => {
+                            let body = serde_json::to_string(&result).unwrap_or_default();
+                            json_response(&body, 200)
+                        }
+                        Err(e) => error_json(&e, 400),
+                    }
                 }
             }
             Err(e) => error_json(&e, 400),
@@ -4291,14 +4322,19 @@ pub(super) fn handle_dynamic_api_route(
                                     .to_string(),
                                 mitre_ids: Vec::new(),
                                 created: chrono::Utc::now().to_rfc3339(),
+                                ..Default::default()
                             },
                             strings: vec![crate::yara_engine::RuleString {
                                 id: "$s1".to_string(),
                                 pattern: crate::yara_engine::StringPattern::Text(pattern),
                                 nocase: false,
+                                ..Default::default()
                             }],
                             condition: crate::yara_engine::RuleCondition::AnyOf,
                             enabled: true,
+                            tags: Vec::new(),
+                            is_private: false,
+                            is_global: false,
                         };
                         let mut s = state
                             .lock()
@@ -5058,7 +5094,7 @@ pub(super) fn handle_dynamic_api_route(
                     }
                     // Assign an ID if not present
                     if hook.get("id").is_none() {
-                        use rand::Rng;
+                        use rand::RngExt;
                         let mut rng = rand::rng();
                         let mut buf = [0u8; 16];
                         rng.fill(&mut buf);
@@ -5150,6 +5186,33 @@ pub(super) fn handle_dynamic_api_route(
                 None => error_json("lane not found", 404),
             }
         }
+    // ── Threat-intel enrichment (VirusTotal / AbuseIPDB) ────────────
+    } else if method == Method::Get && url_path == "/api/integrations/enrichment" {
+        crate::server::handle_enrichment_config_get(state)
+    } else if method == Method::Post && url_path == "/api/integrations/enrichment" {
+        crate::server::handle_enrichment_config_post(body, state)
+    } else if method == Method::Post && url_path == "/api/enrich/lookup" {
+        crate::server::handle_enrich_lookup(body, state)
+
+    // ── Ticketing (Jira / ServiceNow) ────────────────────────────────
+    } else if method == Method::Get && url_path == "/api/integrations/ticketing/jira" {
+        crate::server::handle_ticketing_jira_get(state)
+    } else if method == Method::Post && url_path == "/api/integrations/ticketing/jira" {
+        crate::server::handle_ticketing_jira_post(body, state)
+    } else if method == Method::Get && url_path == "/api/integrations/ticketing/servicenow" {
+        crate::server::handle_ticketing_servicenow_get(state)
+    } else if method == Method::Post && url_path == "/api/integrations/ticketing/servicenow" {
+        crate::server::handle_ticketing_servicenow_post(body, state)
+    } else if method == Method::Post && url_path == "/api/tickets/pull" {
+        crate::server::handle_tickets_pull(body, state)
+
+    // ── OTLP export ──────────────────────────────────────────────────
+    } else if method == Method::Get && url_path == "/api/telemetry/otlp" {
+        crate::server::handle_otlp_config_get(state)
+    } else if method == Method::Post && url_path == "/api/telemetry/otlp" {
+        crate::server::handle_otlp_config_post(body, state)
+    } else if method == Method::Post && url_path == "/api/telemetry/otlp/flush" {
+        crate::server::handle_otlp_flush(state)
     } else {
         error_json("not found", 404)
     }

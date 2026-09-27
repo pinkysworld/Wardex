@@ -47,3 +47,8 @@ doc = false
 name = "secrets_expand"
 path = "fuzz_targets/secrets_expand.rs"
 doc = false
+
+[[bin]]
+name = "wasm_extension_load"
+path = "fuzz_targets/wasm_extension_load.rs"
+doc = false

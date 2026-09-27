@@ -4,6 +4,7 @@ import { useApi, useApiGroup, useInterval } from '../hooks.jsx';
 import * as api from '../api.js';
 import WorkflowGuidance from './WorkflowGuidance.jsx';
 import { buildHref } from './workflowPivots.js';
+import { IconClose } from './icons.jsx';
 
 const RISK_THRESHOLDS = { critical: 80, high: 60, medium: 40, low: 20 };
 const TIME_RANGES = [
@@ -584,7 +585,7 @@ export default function UEBADashboard() {
                 onClick={() => updateParams({ entity: null })}
                 aria-label="Close entity detail"
               >
-                ✕
+                <IconClose size={14} />
               </button>
             </div>
             {loadingDetail ? (

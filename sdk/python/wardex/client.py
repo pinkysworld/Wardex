@@ -3,14 +3,15 @@
 from __future__ import annotations
 
 import datetime
-from email.utils import parsedate_to_datetime
 import logging
 import random
 import time
-from typing import Any, Generator, Literal, TypedDict
+from collections.abc import Generator
+from email.utils import parsedate_to_datetime
+from typing import TYPE_CHECKING, Any, Literal, TypedDict
+from urllib.parse import quote
 
 import requests
-from urllib.parse import quote
 
 from wardex.exceptions import (
     AuthenticationError,
@@ -19,6 +20,9 @@ from wardex.exceptions import (
     ServerError,
     WardexError,
 )
+
+if TYPE_CHECKING:
+    from typing_extensions import Self
 
 MAX_BATCH_SIZE = 10_000
 DEFAULT_RETRIES = 3
@@ -156,10 +160,10 @@ class WardexClient:
 
     # ── context manager ───────────────────────────────────────────────────
 
-    def __enter__(self) -> WardexClient:
+    def __enter__(self) -> Self:
         return self
 
-    def __exit__(self, *exc: Any) -> None:
+    def __exit__(self, *exc: object) -> None:
         self.close()
 
     def close(self) -> None:
@@ -220,7 +224,7 @@ class WardexClient:
                             try:
                                 dt = parsedate_to_datetime(retry_after)
                                 delay = max(0, (dt - datetime.datetime.now(datetime.timezone.utc)).total_seconds())
-                            except Exception:
+                            except (TypeError, ValueError, IndexError, OverflowError):
                                 delay = self._backoff_delay(attempt)
                     else:
                         delay = self._backoff_delay(attempt)

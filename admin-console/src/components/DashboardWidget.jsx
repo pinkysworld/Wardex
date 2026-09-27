@@ -1,4 +1,12 @@
 import { useState, useCallback, useRef } from 'react';
+import {
+  IconChevronDown,
+  IconChevronRight,
+  IconClose,
+  IconGripVertical,
+  IconPause,
+  IconPlay,
+} from './icons.jsx';
 
 /**
  * DashboardWidget — draggable, collapsible, removable dashboard widget wrapper.
@@ -61,7 +69,7 @@ export default function DashboardWidget({
     >
       <div className="widget-header">
         <span className="widget-grip" aria-hidden="true">
-          ⠿
+          <IconGripVertical size={14} />
         </span>
         <span className="widget-title">{title}</span>
         <div className="widget-controls">
@@ -73,7 +81,7 @@ export default function DashboardWidget({
               title={paused ? 'Resume auto-refresh' : 'Pause auto-refresh'}
               style={{ fontSize: 12, opacity: paused ? 1 : 0.5 }}
             >
-              {paused ? '⏸' : '▶'}
+              {paused ? <IconPlay size={14} /> : <IconPause size={14} />}
             </button>
           )}
           <button
@@ -82,7 +90,7 @@ export default function DashboardWidget({
             aria-label={collapsed ? `Expand ${title}` : `Collapse ${title}`}
             title={collapsed ? 'Expand' : 'Collapse'}
           >
-            {collapsed ? '▸' : '▾'}
+            {collapsed ? <IconChevronRight size={14} /> : <IconChevronDown size={14} />}
           </button>
           {onRemove && (
             <button
@@ -91,7 +99,7 @@ export default function DashboardWidget({
               aria-label={`Remove ${title} widget`}
               title="Remove widget"
             >
-              ✕
+              <IconClose size={14} />
             </button>
           )}
         </div>

@@ -1,0 +1,20 @@
+[package]
+name = "wardex-example-extension"
+version = "0.1.0"
+edition = "2021"
+publish = false
+
+# Intentionally NOT a member of the main Wardex workspace/crate (the root
+# Cargo.toml is not a workspace at all). This is a standalone crate meant
+# to be built for wasm32-unknown-unknown and dropped into a Wardex
+# `wasm_runtime.extensions_dir`; it is never compiled as part of `cargo
+# build`/`cargo test` at the repository root.
+
+[lib]
+crate-type = ["cdylib"]
+
+[profile.release]
+opt-level = "s"
+lto = true
+panic = "abort"
+strip = true

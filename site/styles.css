@@ -50,6 +50,29 @@
 *, *::before, *::after { box-sizing: border-box; }
 html { scroll-behavior: smooth; scroll-padding-top: 80px; }
 
+.skip-link {
+  position: absolute;
+  top: -100px;
+  left: 12px;
+  z-index: 2000;
+  padding: 10px 16px;
+  border-radius: 0 0 8px 8px;
+  background: var(--accent);
+  color: #fff;
+  font-size: 0.85rem;
+  font-weight: 600;
+  transition: top 150ms ease;
+}
+
+.skip-link:focus {
+  top: 0;
+}
+
+:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
 body {
   margin: 0;
   font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
@@ -367,6 +390,23 @@ ul { list-style: none; margin: 0; padding: 0; }
   margin-top: 32px;
 }
 
+.hero-release-link {
+  margin-top: 14px;
+}
+
+.hero-release-link a {
+  font-size: 0.84rem;
+  font-weight: 600;
+  color: var(--ink-3);
+  border-bottom: 1px solid transparent;
+  transition: color var(--transition), border-color var(--transition);
+}
+
+.hero-release-link a:hover {
+  color: var(--accent);
+  border-color: var(--accent);
+}
+
 /* Buttons */
 .btn {
   display: inline-flex;
@@ -518,21 +558,71 @@ ul { list-style: none; margin: 0; padding: 0; }
 
 .console-chrome {
   display: flex;
+  align-items: center;
   gap: 6px;
   padding: 12px 16px;
   border-bottom: 1px solid rgba(255,255,255,0.05);
 }
 
-.console-chrome span {
+/* Copy button: a self-contained pill that never sits inline with code.
+   Inside a console header bar it is pushed to the far right via
+   margin-left: auto; inside a single-line terminal snippet it is just
+   another flex child with its own padding, so it can never overlap the
+   command text next to it. */
+.copy-btn {
+  display: inline-flex;
+  flex-shrink: 0;
+  align-items: center;
+  gap: 5px;
+  margin-left: auto;
+  padding: 5px 10px;
+  border: 1px solid rgba(255,255,255,0.14);
+  border-radius: 6px;
+  background: rgba(255,255,255,0.06);
+  color: var(--console-fg);
+  font: inherit;
+  font-size: 0.7rem;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  line-height: 1;
+  white-space: nowrap;
+  cursor: pointer;
+  transition: background 150ms ease, border-color 150ms ease, color 150ms ease;
+}
+
+.copy-btn svg { flex-shrink: 0; }
+
+.copy-btn:hover {
+  background: rgba(255,255,255,0.12);
+  border-color: rgba(255,255,255,0.26);
+  color: #fff;
+}
+
+.copy-btn:focus-visible {
+  outline: 2px solid var(--nav-accent);
+  outline-offset: 2px;
+}
+
+.copy-btn.copied {
+  background: rgba(79,209,178,0.16);
+  border-color: rgba(79,209,178,0.4);
+  color: var(--nav-accent);
+}
+
+/* The direct-child combinator matters here: without it, this selector
+   would also match the <span> label inside a .copy-btn appended into the
+   chrome bar (it would land on nth-child(2) of the button, not of the
+   chrome bar) and paint the "Copy" label with a traffic-light color. */
+.console-chrome > span {
   width: 10px;
   height: 10px;
   border-radius: 50%;
   background: rgba(255,255,255,0.12);
 }
 
-.console-chrome span:nth-child(1) { background: #ec6a5e; }
-.console-chrome span:nth-child(2) { background: #f4bf4f; }
-.console-chrome span:nth-child(3) { background: #61c554; }
+.console-chrome > span:nth-child(1) { background: #ec6a5e; }
+.console-chrome > span:nth-child(2) { background: #f4bf4f; }
+.console-chrome > span:nth-child(3) { background: #61c554; }
 
 .console-output {
   margin: 0;
@@ -543,7 +633,7 @@ ul { list-style: none; margin: 0; padding: 0; }
   overflow-x: auto;
 }
 
-.c-dim   { color: rgba(200,205,213,0.4); }
+.c-dim   { color: #8b93a1; }
 .c-label { color: var(--nav-accent); font-weight: 500; }
 .c-ok    { color: #61c554; }
 
@@ -614,7 +704,7 @@ ul { list-style: none; margin: 0; padding: 0; }
 
 .arch-stage p {
   font-size: 0.9rem;
-  color: #41505d;
+  color: var(--ink-2);
   line-height: 1.7;
   margin-bottom: 18px;
 }
@@ -1373,6 +1463,12 @@ ul { list-style: none; margin: 0; padding: 0; }
   border-top: 1px solid rgba(255,255,255,0.06);
 }
 
+.footer-bottom a {
+  text-decoration: underline;
+  text-underline-offset: 2px;
+  text-decoration-color: rgba(255,255,255,0.35);
+}
+
 .footer-bottom p {
   font-size: 0.78rem;
   color: rgba(255,255,255,0.66);
@@ -1873,6 +1969,20 @@ ul { list-style: none; margin: 0; padding: 0; }
   transform: translateY(0);
 }
 
+@media (prefers-reduced-motion: reduce) {
+  html { scroll-behavior: auto; }
+  .reveal {
+    opacity: 1;
+    transform: none;
+    transition: none;
+  }
+  *, *::before, *::after {
+    animation-duration: 0.001ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.001ms !important;
+  }
+}
+
 /* Stagger helper — set via JS */
 [data-delay] {
   animation-delay: var(--stagger);
@@ -2094,33 +2204,64 @@ ul { list-style: none; margin: 0; padding: 0; }
 
 /* ── Stat strip (horizontal numbers bar) ──────────────────────────────── */
 .stat-strip {
+  position: relative;
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
-  gap: 1.5rem;
+  gap: 0;
   margin-top: 2rem;
-  padding: 2rem;
-  background: var(--bg-alt);
+  padding: 2rem 0;
+  background: var(--surface);
   border: 1px solid var(--border);
   border-radius: 12px;
+  box-shadow: var(--shadow-sm);
+  overflow: hidden;
 }
+
+.stat-strip::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 3px;
+  background: linear-gradient(90deg, var(--accent) 0%, var(--nav-accent) 50%, var(--accent-2) 100%);
+}
+
 .stat-strip .stat-item {
+  position: relative;
   text-align: center;
+  padding: 0 1.5rem;
 }
+
+.stat-strip .stat-item + .stat-item::before {
+  content: '';
+  position: absolute;
+  top: 0.15rem;
+  bottom: 0.15rem;
+  left: 0;
+  width: 1px;
+  background: var(--border);
+}
+
 .stat-strip .stat-value {
   display: block;
   font-family: var(--font-mono, 'JetBrains Mono', monospace);
-  font-size: 2rem;
+  font-size: 2.1rem;
   font-weight: 700;
   color: var(--accent);
   line-height: 1;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: -0.02em;
 }
+
 .stat-strip .stat-label {
   display: block;
-  margin-top: 0.35rem;
-  font-size: 0.82rem;
-  color: var(--ink-soft);
+  margin-top: 0.5rem;
+  font-size: 0.78rem;
+  color: var(--ink-3);
   text-transform: uppercase;
-  letter-spacing: 0.08em;
+  letter-spacing: 0.1em;
+  font-weight: 600;
 }
 
 /* ── Inside Wardex (live screenshot gallery) ─────────────────────────── */
@@ -2322,6 +2463,28 @@ ul { list-style: none; margin: 0; padding: 0; }
 }
 
 @media (max-width: 768px) {
+  .stat-strip {
+    grid-template-columns: repeat(2, 1fr);
+    gap: 1.5rem 0;
+  }
+
+  .stat-strip .stat-item {
+    padding: 0.25rem 1rem;
+  }
+
+  .stat-strip .stat-item:nth-child(2n+1)::before {
+    display: none;
+  }
+
+  .stat-strip .stat-item:nth-child(n+3) {
+    padding-top: 1.25rem;
+    border-top: 1px solid var(--border);
+  }
+
+  .stat-strip .stat-item:nth-child(n+3)::before {
+    top: 1.4rem;
+  }
+
   .insights-copy {
     padding: 1.6rem;
   }
@@ -3182,6 +3345,20 @@ ul { list-style: none; margin: 0; padding: 0; }
   grid-template-columns: repeat(2, minmax(0, 1fr));
 }
 
+/* Grid items default to a min-width based on their content's intrinsic
+   size. A long unwrapped code line inside .code-block would otherwise
+   force this card (and the whole grid/page) wider than the viewport even
+   though .code-block itself scrolls internally — min-width: 0 lets the
+   card shrink to the track width so that internal scrollbar does its job
+   instead of the page growing a horizontal scrollbar. */
+.integration-code-card {
+  min-width: 0;
+}
+
+.integration-code-card .code-block {
+  min-width: 0;
+}
+
 .integration-doc-card,
 .integration-step,
 .integration-code-card,
@@ -3325,3 +3502,85 @@ ul { list-style: none; margin: 0; padding: 0; }
 .form-status-error { color: #ff9a9a; }
 .form-status-ok { color: #a0e6c0; }
 .form-footnote { margin-top: 1rem; font-size: 0.85rem; }
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   Dark-mode fix-ups — kept at the end of the file on purpose.
+   Several components below (added well after the original dark-mode
+   variable block near the top of this file) paint hardcoded light/white
+   surfaces instead of using the --bg/--surface tokens. Because CSS breaks
+   specificity ties by source order, those later hardcoded rules were
+   silently winning over an earlier dark-mode override at the same
+   specificity. Redeclaring them here, last, makes the override win for
+   real under prefers-color-scheme: dark.
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+@media (prefers-color-scheme: dark) {
+  .arch-flow {
+    background:
+      radial-gradient(circle at top left, rgba(79,209,178,0.10), transparent 30%),
+      radial-gradient(circle at bottom right, rgba(196,122,46,0.09), transparent 32%),
+      linear-gradient(180deg, rgba(255,255,255,0.05), rgba(255,255,255,0.02));
+  }
+
+  .arch-stage {
+    background:
+      linear-gradient(180deg, rgba(255,255,255,0.05), rgba(255,255,255,0.02)),
+      var(--surface);
+  }
+
+  .support-hero {
+    background:
+      radial-gradient(circle at top right, rgba(79, 209, 178, 0.16), transparent 32%),
+      radial-gradient(circle at left 18%, rgba(196, 122, 46, 0.14), transparent 28%),
+      linear-gradient(180deg, rgba(255,255,255,0.04), rgba(255,255,255,0.01));
+  }
+
+  .support-note {
+    background: linear-gradient(180deg, rgba(79, 209, 178, 0.10), rgba(255,255,255,0));
+  }
+
+  .insights-copy {
+    background: linear-gradient(180deg, rgba(34, 38, 44, 0.97) 0%, rgba(28, 32, 38, 0.97) 100%);
+    border-color: rgba(224, 150, 74, 0.24);
+  }
+
+  .insight-pill {
+    background: rgba(255, 255, 255, 0.07);
+    border-color: rgba(79, 209, 178, 0.22);
+    color: var(--ink-2);
+  }
+
+  .insight-card {
+    background: rgba(255, 255, 255, 0.045);
+    border-color: rgba(255, 255, 255, 0.09);
+  }
+
+  .integration-callout {
+    background: linear-gradient(180deg, rgba(79,209,178,0.12), rgba(255,255,255,0));
+  }
+
+  .track-badge.planned {
+    background: rgba(58, 92, 112, 0.22);
+    color: #a9cadd;
+    border-color: rgba(169, 202, 221, 0.25);
+  }
+
+  .track-badge.future {
+    background: rgba(106, 96, 128, 0.24);
+    color: #cabfe0;
+    border-color: rgba(202, 191, 224, 0.25);
+  }
+
+  .track-badge.severe {
+    background: rgba(141, 46, 46, 0.28);
+    color: #ffb3b3;
+    border-color: rgba(255, 179, 179, 0.25);
+  }
+
+  .insights-section {
+    background:
+      radial-gradient(circle at 16% 18%, rgba(196, 122, 46, 0.14) 0%, transparent 28%),
+      radial-gradient(circle at 86% 14%, rgba(26, 107, 90, 0.16) 0%, transparent 24%),
+      linear-gradient(180deg, var(--bg-alt) 0%, var(--bg) 100%);
+  }
+}

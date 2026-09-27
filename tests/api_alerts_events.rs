@@ -1185,3 +1185,51 @@ fn agent_client_can_download_assigned_update_binary() {
     let binary = client.download_update(&info).expect("download update");
     assert_eq!(binary, b"hello");
 }
+
+#[test]
+fn rbac_user_creation_maps_role_aliases_and_rejects_unknown_roles() {
+    let (port, token) = spawn_test_server();
+
+    // The admin console sends "service-account"; it must create a service
+    // account, not silently fall back to a viewer.
+    for (username, role) in [
+        ("svc-dash", "service-account"),
+        ("svc-underscore", "service_account"),
+        ("svc-short", "service"),
+    ] {
+        ureq::post(&format!("{}/api/rbac/users", base(port)))
+            .set("Authorization", &auth_header(&token))
+            .send_json(serde_json::json!({"username": username, "role": role}))
+            .expect("create service account");
+    }
+    let users: serde_json::Value = ureq::get(&format!("{}/api/rbac/users", base(port)))
+        .set("Authorization", &auth_header(&token))
+        .call()
+        .expect("list users")
+        .into_json()
+        .unwrap();
+    let listed = users.to_string();
+    for username in ["svc-dash", "svc-underscore", "svc-short"] {
+        let entry = users["users"]
+            .as_array()
+            .and_then(|all| all.iter().find(|u| u["username"] == username))
+            .unwrap_or_else(|| panic!("{username} missing from {listed}"));
+        assert_eq!(
+            entry["role"]
+                .as_str()
+                .map(str::to_ascii_lowercase)
+                .as_deref(),
+            Some("serviceaccount"),
+            "{username}: {entry}"
+        );
+    }
+
+    match ureq::post(&format!("{}/api/rbac/users", base(port)))
+        .set("Authorization", &auth_header(&token))
+        .send_json(serde_json::json!({"username": "typo", "role": "superuser"}))
+    {
+        Ok(r) => panic!("unknown role accepted with status {}", r.status()),
+        Err(ureq::Error::Status(status, _)) => assert_eq!(status, 400),
+        Err(e) => panic!("unexpected transport error: {e}"),
+    }
+}

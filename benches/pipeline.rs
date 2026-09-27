@@ -138,7 +138,7 @@ fn bench_search_index(c: &mut Criterion) {
     use std::collections::HashMap;
     use wardex::search::{SearchIndex, SearchQuery};
 
-    let idx = SearchIndex::new("/tmp/bench_search").unwrap();
+    let idx = SearchIndex::in_memory().unwrap();
     // Populate index with 500 events
     for i in 0..500 {
         let mut fields = HashMap::new();
@@ -189,7 +189,7 @@ fn bench_hunt_query(c: &mut Criterion) {
     use std::collections::HashMap;
     use wardex::search::SearchIndex;
 
-    let idx = SearchIndex::new("/tmp/bench_hunt").unwrap();
+    let idx = SearchIndex::in_memory().unwrap();
     for i in 0..500 {
         let mut fields = HashMap::new();
         fields.insert(

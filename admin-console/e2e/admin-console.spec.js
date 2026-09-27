@@ -42,7 +42,7 @@ test.describe('Admin console smoke', () => {
       {
         title: 'Dashboard',
         navTitle: 'Dashboard',
-        marker: () => page.getByText('Security Overview'),
+        marker: () => page.getByText('Priority Stack', { exact: true }),
       },
       {
         title: 'Live Monitor',
@@ -121,14 +121,16 @@ test.describe('Admin console smoke', () => {
     await expect(page).toHaveURL(/\/detection/);
     await expect(page.getByText('Detection Engineering Workspace')).toBeVisible({ timeout: 15000 });
 
-    await page.getByRole('button', { name: 'Help For View' }).click();
+    // At the default (wide, >=1280px) Playwright viewport, Help For View and
+    // Share Link render inline in the topbar instead of behind "More".
+    await page.getByRole('button', { name: /Help For View/ }).click();
     await expect(page).toHaveURL(/\/help/);
     await expect(page.locator('.topbar-title')).toHaveText('Help & Docs');
     await expect(page.getByText('Detection Support')).toBeVisible();
 
     await page.keyboard.press('?');
     await expect(page.getByText('Keyboard Shortcuts')).toBeVisible();
-    await page.getByRole('button', { name: '✕' }).click();
+    await page.getByRole('button', { name: 'Close keyboard shortcuts' }).click();
     await expect(page.getByText('Keyboard Shortcuts')).toHaveCount(0);
 
     await page.getByRole('button', { name: 'Share Link' }).click();
@@ -188,12 +190,12 @@ test.describe('Admin console smoke', () => {
     });
     await seedAuthenticatedSession(page);
 
-    await expect(page.getByText('Security Overview')).toBeVisible();
+    await expect(page.getByText('Priority Stack', { exact: true })).toBeVisible();
     await expect.poll(() => trackedKeys.every((key) => counts[key] > 0)).toBe(true);
 
     const initialCounts = { ...counts };
 
-    await page.getByRole('button', { name: '↻ Refresh' }).click();
+    await page.getByRole('button', { name: 'Refresh', exact: true }).click();
 
     await expect
       .poll(() => trackedKeys.every((key) => counts[key] === initialCounts[key] + 1))

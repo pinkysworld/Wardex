@@ -360,6 +360,14 @@ pub fn endpoint_permission(method: &str, path: &str) -> Permission {
         ("GET", "/api/workbench/overview") => Permission::ViewIncidents,
         ("GET", "/api/manager/overview") => Permission::ViewReports,
 
+        // OTLP exporter configuration: reading it exposes collector endpoints
+        // and headers, writing it redirects telemetry egress, and flushing
+        // triggers outbound requests. Admin-only for every method; this rule
+        // must precede the generic `/api/telemetry*` read and ingest rules.
+        (_, p) if p == "/api/telemetry/otlp" || p.starts_with("/api/telemetry/otlp/") => {
+            Permission::ManageConfig
+        }
+
         // Events
         ("GET", p) if p.starts_with("/api/telemetry/") => Permission::ViewEvents,
         ("GET", p) if p.starts_with("/api/events") => Permission::ViewEvents,
@@ -614,6 +622,11 @@ pub fn endpoint_permission(method: &str, path: &str) -> Permission {
             Permission::ManageFeatureFlags
         }
 
+        // Federated learning (admin control-plane endpoints only; agent
+        // fetch/submit endpoints are agent-token authenticated, not RBAC)
+        ("GET", p) if p.starts_with("/api/federation") => Permission::ViewAgents,
+        (_, p) if p.starts_with("/api/federation") => Permission::ManageAgents,
+
         // Default: require admin
         _ => Permission::ManageConfig,
     }
@@ -785,6 +798,42 @@ mod tests {
         assert!(
             !store
                 .check_api_access("viewer-token", "POST", "/api/telemetry")
+                .is_allowed()
+        );
+    }
+
+    #[test]
+    fn otlp_exporter_endpoints_require_admin() {
+        let store = setup_store();
+        let routes = [
+            ("GET", "/api/telemetry/otlp"),
+            ("POST", "/api/telemetry/otlp"),
+            ("POST", "/api/telemetry/otlp/flush"),
+            ("GET", "/api/telemetry/otlp?verbose=1"),
+        ];
+        for (method, path) in routes {
+            assert_eq!(
+                endpoint_permission(method, path),
+                Permission::ManageConfig,
+                "{method} {path}"
+            );
+            for token in ["viewer-token", "analyst-token", "sa-token"] {
+                assert!(
+                    !store.check_api_access(token, method, path).is_allowed(),
+                    "{token} must not reach {method} {path}"
+                );
+            }
+            assert!(
+                store
+                    .check_api_access("admin-token", method, path)
+                    .is_allowed(),
+                "admin must reach {method} {path}"
+            );
+        }
+        // Generic telemetry ingestion stays available to service accounts.
+        assert!(
+            store
+                .check_api_access("sa-token", "POST", "/api/telemetry")
                 .is_allowed()
         );
     }

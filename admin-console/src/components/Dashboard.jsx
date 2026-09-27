@@ -26,6 +26,15 @@ import { useWidgetLayout } from './useWidgetLayout.js';
 import { buildHref } from './workflowPivots.js';
 import { safeStorageGet, safeStorageJsonGet, safeStorageJsonSet } from '../safeStorage.js';
 import { MALWARE_SCAN_PRESETS } from './malwareScanningPresets.js';
+import PageHeader from './PageHeader.jsx';
+import {
+  IconAlertTriangle,
+  IconCheck,
+  IconClose,
+  IconLayoutReset,
+  IconMonitorPlay,
+  IconRefresh,
+} from './icons.jsx';
 
 function Metric({ label, value, sub, accent, onClick, tip }) {
   return (
@@ -715,44 +724,14 @@ export default function Dashboard() {
     respStats?.pending,
     staleAlerts.length,
   ]);
-  const dashboardHomeSummary = [
-    {
-      label: 'Critical queue',
-      value: formatNumber(critical),
-      meta:
-        critical > 0
-          ? `${critical} alert${critical === 1 ? '' : 's'} need immediate review`
-          : 'No critical alerts are active',
-    },
-    {
-      label: 'Stale queue',
-      value: formatNumber(staleAlerts.length),
-      meta:
-        staleAlerts.length > 0
-          ? 'Alerts older than 30 minutes still need ownership'
-          : 'No alerts are beyond the stale threshold',
-    },
-    {
-      label: 'Response blockers',
-      value: formatNumber(respStats?.pending ?? 0),
-      meta:
-        (respStats?.pending ?? 0) > 0
-          ? 'Response steps are waiting for approval'
-          : 'No response actions are blocked',
-    },
-    {
-      label: 'Collectors degraded',
-      value: formatNumber(degradedCollectors.length),
-      meta:
-        degradedCollectors.length > 0
-          ? `${collectorFreshnessCounts.error ?? 0} error • ${collectorFreshnessCounts.stale ?? 0} stale`
-          : 'All enabled collectors are fresh',
-    },
-  ];
+  // A single merged KPI row: each card pairs a severity-toned count with a
+  // one-click action, replacing what used to be two separate rows repeating
+  // the same critical/stale/response numbers.
   const situationCards = [
     {
       title: 'Critical Now',
       value: formatNumber(critical),
+      tone: critical > 0 ? 'critical' : 'neutral',
       detail:
         critical > 0
           ? `${critical} alert${critical === 1 ? '' : 's'} need immediate review.`
@@ -763,6 +742,7 @@ export default function Dashboard() {
     {
       title: 'Stale Untriaged',
       value: formatNumber(staleAlerts.length),
+      tone: staleAlerts.length > 0 ? 'high' : 'neutral',
       detail:
         staleAlerts.length > 0
           ? 'Older than 30 minutes and still visible in the queue.'
@@ -773,12 +753,24 @@ export default function Dashboard() {
     {
       title: 'Response Pending Approval',
       value: formatNumber(respStats?.pending ?? 0),
+      tone: (respStats?.pending ?? 0) > 0 ? 'medium' : 'neutral',
       detail:
         (respStats?.pending ?? 0) > 0
           ? 'Response actions are waiting for operator approval.'
           : 'No response actions are blocked right now.',
       action: 'Review Response',
       onAction: () => navigate('/soc#response'),
+    },
+    {
+      title: 'Collectors Degraded',
+      value: formatNumber(degradedCollectors.length),
+      tone: degradedCollectors.length > 0 ? 'high' : 'neutral',
+      detail:
+        degradedCollectors.length > 0
+          ? `${collectorFreshnessCounts.error ?? 0} error • ${collectorFreshnessCounts.stale ?? 0} stale collector(s).`
+          : 'All enabled collectors are fresh.',
+      action: 'Review Collectors',
+      onAction: () => navigate('/infrastructure?tab=collectors'),
     },
   ];
   const coverageGapCount = Array.isArray(gaps?.gaps)
@@ -871,32 +863,42 @@ export default function Dashboard() {
 
   return (
     <div>
-      <div className="section-header">
-        <h2>Security Overview</h2>
-        <div className="btn-group">
-          {hostInf && (
-            <span style={{ fontSize: 12, color: 'var(--text-secondary)' }}>
-              {hostInf.hostname} · {hostInf.platform} {hostInf.os_version} · {hostInf.arch}
-            </span>
-          )}
-          <button className="btn btn-sm" onClick={reloadAll} disabled={refreshing}>
-            {refreshing ? 'Refreshing…' : '↻ Refresh'}
-          </button>
-          <button className="btn btn-sm" onClick={resetLayout} title="Reset widget layout">
-            ⊞ Reset Layout
-          </button>
-          <button
-            className="btn btn-sm"
-            onClick={() => {
-              setNocMode(true);
-              document.documentElement.requestFullscreen?.().catch(() => {});
-            }}
-            title="NOC wall display (fullscreen)"
-          >
-            📺 NOC
-          </button>
-        </div>
-      </div>
+      <PageHeader
+        eyebrow="Operations Home"
+        title="Dashboard"
+        actions={
+          <>
+            {hostInf && (
+              <span className="hint" style={{ alignSelf: 'center', marginRight: 4 }}>
+                {hostInf.hostname} · {hostInf.platform} {hostInf.os_version} · {hostInf.arch}
+              </span>
+            )}
+            <button className="btn btn-sm" onClick={reloadAll} disabled={refreshing}>
+              <IconRefresh size={14} />
+              {refreshing ? 'Refreshing…' : 'Refresh'}
+            </button>
+            <button
+              className="btn btn-sm btn-ghost"
+              onClick={resetLayout}
+              title="Reset widget layout"
+            >
+              <IconLayoutReset size={14} />
+              Reset Layout
+            </button>
+            <button
+              className="btn btn-sm btn-ghost"
+              onClick={() => {
+                setNocMode(true);
+                document.documentElement.requestFullscreen?.().catch(() => {});
+              }}
+              title="NOC wall display (fullscreen)"
+            >
+              <IconMonitorPlay size={14} />
+              NOC
+            </button>
+          </>
+        }
+      />
 
       <section className="dashboard-home-strip" aria-label="Dashboard operating summary">
         <div className="dashboard-home-hero">
@@ -933,20 +935,11 @@ export default function Dashboard() {
             </button>
           </div>
         </div>
-        <div className="summary-grid dashboard-home-summary-grid">
-          {dashboardHomeSummary.map((item) => (
-            <div key={item.label} className="summary-card">
-              <div className="summary-label">{item.label}</div>
-              <div className="summary-value">{item.value}</div>
-              <div className="summary-meta">{item.meta}</div>
-            </div>
-          ))}
-        </div>
       </section>
 
       <div className="situation-grid">
         {situationCards.map((card) => (
-          <article key={card.title} className="situation-card">
+          <article key={card.title} className="situation-card" data-tone={card.tone}>
             <div className="situation-eyebrow">{card.title}</div>
             <div className="situation-value">{card.value}</div>
             <p className="situation-copy">{card.detail}</p>
@@ -1104,7 +1097,7 @@ export default function Dashboard() {
                       setNocMode(false);
                     }}
                   >
-                    ✕ Exit
+                    <IconClose size={14} /> Exit
                   </button>
                 </div>
               </div>
@@ -1112,7 +1105,15 @@ export default function Dashboard() {
                 <div className="card-grid" style={{ fontSize: 18 }}>
                   <Metric
                     label="System Status"
-                    value={hp?.status === 'ok' ? '✓ Healthy' : hp?.status || '—'}
+                    value={
+                      hp?.status === 'ok' ? (
+                        <>
+                          <IconCheck size={16} /> Healthy
+                        </>
+                      ) : (
+                        hp?.status || '—'
+                      )
+                    }
                     sub={`Uptime: ${st?.uptime || '—'}`}
                     accent
                   />
@@ -1153,7 +1154,15 @@ export default function Dashboard() {
               <div className="card-grid">
                 <Metric
                   label="System Status"
-                  value={hp?.status === 'ok' ? '✓ Healthy' : hp?.status || '—'}
+                  value={
+                    hp?.status === 'ok' ? (
+                      <>
+                        <IconCheck size={16} /> Healthy
+                      </>
+                    ) : (
+                      hp?.status || '—'
+                    )
+                  }
                   sub={`Uptime: ${st?.uptime || '—'}`}
                   accent
                 />
@@ -1606,9 +1615,15 @@ export default function Dashboard() {
                   <span
                     className={`badge ${procAnalysis.status === 'clean' ? 'badge-ok' : procAnalysis.status === 'critical' ? 'badge-err' : 'badge-warn'}`}
                   >
-                    {procAnalysis.status === 'clean'
-                      ? '✓ Clean'
-                      : `⚠ ${procAnalysis.total || 0} finding(s)`}
+                    {procAnalysis.status === 'clean' ? (
+                      <>
+                        <IconCheck size={12} /> Clean
+                      </>
+                    ) : (
+                      <>
+                        <IconAlertTriangle size={12} /> {procAnalysis.total || 0} finding(s)
+                      </>
+                    )}
                   </span>
                 </div>
                 {procAnalysis.findings?.length > 0 ? (
@@ -1696,7 +1711,15 @@ export default function Dashboard() {
                       <div key={k} style={{ textAlign: 'center' }}>
                         <div className="metric-label">{k.replace(/_/g, ' ')}</div>
                         <div style={{ fontSize: 18, fontWeight: 600 }}>
-                          {typeof v === 'boolean' ? (v ? '✓' : '✗') : v}
+                          {typeof v === 'boolean' ? (
+                            v ? (
+                              <IconCheck size={16} />
+                            ) : (
+                              <IconClose size={16} />
+                            )
+                          ) : (
+                            v
+                          )}
                         </div>
                       </div>
                     ))}
