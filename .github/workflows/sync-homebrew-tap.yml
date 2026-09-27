@@ -17,6 +17,7 @@ jobs:
   sync-homebrew-tap:
     name: Sync Homebrew Tap
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     env:
       TAP_REPOSITORY: pinkysworld/homebrew-wardex
     steps:
