@@ -1,6 +1,6 @@
 [package]
 name = "wardex"
-version = "1.0.30"
+version = "1.1.0"
 edition = "2024"
 rust-version = "1.88.0"
 build = "build.rs"

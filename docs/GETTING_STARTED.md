@@ -95,7 +95,7 @@ This refreshes the structured status payload consumed by the static site and off
 cargo test
 ```
 
-The current release tracks 2028 Rust test functions, 328 admin-console tests, and 34 managed Playwright checks across 16 browser specs. Treat seeded demo data as evaluation-only when you validate the first-run operator journey.
+The current release tracks 2120 Rust test functions, 334 admin-console tests, and 34 managed Playwright checks across 16 browser specs. Treat seeded demo data as evaluation-only when you validate the first-run operator journey.
 
 ## Frontend development (admin-console)
 

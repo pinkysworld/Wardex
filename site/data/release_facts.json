@@ -1,12 +1,12 @@
 {
   "counts": {
-    "admin_console_tests": 328,
+    "admin_console_tests": 334,
     "openapi_operations": 268,
     "playwright_specs": 16,
     "playwright_tests": 34,
-    "rust_modules": 196,
-    "rust_tests": 2028,
-    "total_automated_checks": 2390
+    "rust_modules": 197,
+    "rust_tests": 2120,
+    "total_automated_checks": 2488
   },
   "distribution": {
     "apt_repo": "https://pinkysworld.github.io/Wardex/apt",
@@ -42,5 +42,5 @@
     "security_advisory_url": "https://github.com/pinkysworld/Wardex/security/advisories/new",
     "security_email": "security@wardex.dev"
   },
-  "version": "1.0.30"
+  "version": "1.1.0"
 }

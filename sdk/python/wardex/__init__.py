@@ -13,7 +13,7 @@ from wardex.exceptions import (
     WardexError,
 )
 
-__version__ = "1.0.30"
+__version__ = "1.1.0"
 __all__ = [
     "AuthenticationError",
     "CommandCenterLaneResponse",
