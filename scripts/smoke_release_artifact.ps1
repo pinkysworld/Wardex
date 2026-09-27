@@ -15,15 +15,36 @@ $timeoutSeconds = if ($env:WARDEX_RELEASE_SMOKE_TIMEOUT_SECS) { [int]$env:WARDEX
 $tmpRoot = Join-Path ([System.IO.Path]::GetTempPath()) ("wardex-release-smoke-" + [guid]::NewGuid().ToString("N"))
 $serverProcess = $null
 
+function Stop-Server {
+    param($Process)
+    # Kill the whole tree: the server's collectors spawn child processes
+    # (e.g. powershell.exe for WMI scans) that inherit the redirected
+    # stdout/stderr handles and would otherwise keep the log files open.
+    & taskkill.exe /PID $Process.Id /T /F 2>&1 | Out-Null
+    Stop-Process -Id $Process.Id -Force -ErrorAction SilentlyContinue
+    # Neither returns only once Windows has released the handles.
+    $Process.WaitForExit(15000) | Out-Null
+}
+
 function Cleanup {
     if ($script:serverProcess) {
         try {
-            Stop-Process -Id $script:serverProcess.Id -Force -ErrorAction SilentlyContinue
+            Stop-Server $script:serverProcess
         } catch {
         }
     }
-    if (Test-Path $script:tmpRoot) {
-        Remove-Item -Recurse -Force $script:tmpRoot
+    # Deleting the scratch directory is best effort: a handle released a
+    # moment late must not fail an otherwise passing smoke run.
+    for ($attempt = 1; $attempt -le 5 -and (Test-Path $script:tmpRoot); $attempt++) {
+        try {
+            Remove-Item -Recurse -Force $script:tmpRoot -ErrorAction Stop
+        } catch {
+            if ($attempt -eq 5) {
+                Write-Warning "Could not remove ${script:tmpRoot}: $_"
+            } else {
+                Start-Sleep -Seconds 1
+            }
+        }
     }
 }
 
@@ -102,7 +123,7 @@ try {
             Wait-Http -Url "http://127.0.0.1:$port/api/healthz/ready" -Headers @{ Authorization = "Bearer $token" }
             Wait-Http -Url "http://127.0.0.1:$port/api/support/bundle" -Headers @{ Authorization = "Bearer $token" }
 
-            Stop-Process -Id $script:serverProcess.Id -Force
+            Stop-Server $script:serverProcess
             $script:serverProcess = $null
         } finally {
             if ($null -eq $oldConfig) {
