@@ -17,9 +17,12 @@ $serverProcess = $null
 
 function Stop-Server {
     param($Process)
+    # Kill the whole tree: the server's collectors spawn child processes
+    # (e.g. powershell.exe for WMI scans) that inherit the redirected
+    # stdout/stderr handles and would otherwise keep the log files open.
+    & taskkill.exe /PID $Process.Id /T /F 2>&1 | Out-Null
     Stop-Process -Id $Process.Id -Force -ErrorAction SilentlyContinue
-    # Stop-Process returns before Windows releases the process's handles
-    # (including the redirected stdout/stderr logs); wait for a real exit.
+    # Neither returns only once Windows has released the handles.
     $Process.WaitForExit(15000) | Out-Null
 }
 
