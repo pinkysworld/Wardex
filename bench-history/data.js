@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1790481574666,
+  "lastUpdate": 1790529618374,
   "repoUrl": "https://github.com/pinkysworld/Wardex",
   "entries": {
     "Wardex criterion benches": [
@@ -28137,6 +28137,114 @@ window.BENCHMARK_DATA = {
             "name": "sigma_evaluate_20_rules",
             "value": 27782,
             "range": "± 155",
+            "unit": "ns/iter"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "85413447+pinkysworld@users.noreply.github.com",
+            "name": "pinkysworld",
+            "username": "pinkysworld"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "1ec798bda738d63351fca858ac4bed6ce9105de8",
+          "message": "Implement documented features, harden security, refresh console, site and dependencies (#157)\n\nReal kernel telemetry (CN_PROC/fanotify, ETW, macOS ES), YARA compiler, RF training, Tantivy search, federated learning with DP, wasmi extension runtime, threat-intel/ticketing/OTLP/SMTP/Okta/Docker/Kubernetes integrations, security hardening from code review, dependency updates, admin console and site refresh, CI runtime caps.",
+          "timestamp": "2026-09-27T19:10:45+02:00",
+          "tree_id": "4c730878f40c2af2563284d82211c6a2e514a35c",
+          "url": "https://github.com/pinkysworld/Wardex/commit/1ec798bda738d63351fca858ac4bed6ce9105de8"
+        },
+        "date": 1790529617505,
+        "tool": "cargo",
+        "benches": [
+          {
+            "name": "full_pipeline/5",
+            "value": 38920,
+            "range": "± 288",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "full_pipeline/50",
+            "value": 324912,
+            "range": "± 1779",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "full_pipeline/200",
+            "value": 1495331,
+            "range": "± 29097",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "full_pipeline/1000",
+            "value": 14059054,
+            "range": "± 41765",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "detector_evaluate_single",
+            "value": 472,
+            "range": "± 1",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "detector_window_stream_256",
+            "value": 664438,
+            "range": "± 1206",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "shared_storage_observed_schema_read",
+            "value": 106,
+            "range": "± 0",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "shared_storage_4_threads_64_alerts",
+            "value": 112280,
+            "range": "± 1066",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "policy_evaluate_single",
+            "value": 189,
+            "range": "± 0",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "throughput/1000_samples",
+            "value": 14166003,
+            "range": "± 48441",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "search_500_events",
+            "value": 9084190,
+            "range": "± 191498",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "hunt_field_query",
+            "value": 1805461,
+            "range": "± 16078",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "ml_triage_rf",
+            "value": 39,
+            "range": "± 0",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "sigma_evaluate_20_rules",
+            "value": 26977,
+            "range": "± 233",
             "unit": "ns/iter"
           }
         ]
