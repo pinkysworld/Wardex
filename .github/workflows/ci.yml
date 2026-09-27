@@ -578,7 +578,9 @@ jobs:
   # skipped/cancelled upstream job still fails the gate.
   ci-status:
     name: CI Status
-    if: always()
+    # Skipped when a newer push cancelled this run, so a superseded commit
+    # does not report a spurious failure; real job failures still fail it.
+    if: ${{ !cancelled() }}
     needs:
       - test
       - workspace-hygiene
