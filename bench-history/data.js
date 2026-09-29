@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1790568397905,
+  "lastUpdate": 1790654568303,
   "repoUrl": "https://github.com/pinkysworld/Wardex",
   "entries": {
     "Wardex criterion benches": [
@@ -28459,6 +28459,112 @@ window.BENCHMARK_DATA = {
             "name": "sigma_evaluate_20_rules",
             "value": 30415,
             "range": "± 2289",
+            "unit": "ns/iter"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "name": "pinkysworld",
+            "username": "pinkysworld",
+            "email": "85413447+pinkysworld@users.noreply.github.com"
+          },
+          "committer": {
+            "name": "GitHub",
+            "username": "web-flow",
+            "email": "noreply@github.com"
+          },
+          "id": "36942dc5110e25b61648bcfbe3e174804e9eabbf",
+          "message": "fix(release): kill the server's process tree before cleaning up the Windows smoke (#159)\n\n* fix(release): wait for the server to exit before cleaning up the Windows smoke\n\nStop-Process -Force returns before Windows releases the process handles,\nso deleting the scratch directory raced the redirected server logs and\nfailed the published Windows archive smoke after every check had passed\n(v1.1.0 release run). Wait for the process to exit, and make removing\nthe scratch directory a retried, best-effort step.\n\n* fix(release): kill the server's process tree in the Windows smoke\n\nThe re-run failed identically, so the lingering handle is not a timing\nrace: the WMI/PowerShell collector's child processes inherit the\nredirected log handles and survive Stop-Process on the server. Kill the\nwhole tree with taskkill /T before waiting for exit.",
+          "timestamp": "2026-09-27T19:23:25Z",
+          "url": "https://github.com/pinkysworld/Wardex/commit/36942dc5110e25b61648bcfbe3e174804e9eabbf"
+        },
+        "date": 1790654567349,
+        "tool": "cargo",
+        "benches": [
+          {
+            "name": "full_pipeline/5",
+            "value": 49741,
+            "range": "± 816",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "full_pipeline/50",
+            "value": 411945,
+            "range": "± 14277",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "full_pipeline/200",
+            "value": 1879317,
+            "range": "± 31502",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "full_pipeline/1000",
+            "value": 17132270,
+            "range": "± 89086",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "detector_evaluate_single",
+            "value": 693,
+            "range": "± 1",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "detector_window_stream_256",
+            "value": 859608,
+            "range": "± 1679",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "shared_storage_observed_schema_read",
+            "value": 127,
+            "range": "± 0",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "shared_storage_4_threads_64_alerts",
+            "value": 164244,
+            "range": "± 5362",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "policy_evaluate_single",
+            "value": 239,
+            "range": "± 0",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "throughput/1000_samples",
+            "value": 17385924,
+            "range": "± 264127",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "search_500_events",
+            "value": 12050063,
+            "range": "± 198348",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "hunt_field_query",
+            "value": 2289064,
+            "range": "± 53043",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "ml_triage_rf",
+            "value": 54,
+            "range": "± 0",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "sigma_evaluate_20_rules",
+            "value": 35739,
+            "range": "± 149",
             "unit": "ns/iter"
           }
         ]
