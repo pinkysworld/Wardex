@@ -1,17 +1,7 @@
 name: Bench Baselines
 
 on:
-  push:
-    branches: [main]
-    paths:
-      - 'Cargo.toml'
-      - 'Cargo.lock'
-      - 'src/**'
-      - 'benches/**'
-      - '.github/workflows/bench.yml'
-  schedule:
-    # Weekly, Monday 03:45 UTC — catches slow-creeping regressions.
-    - cron: '45 3 * * 1'
+  # Manual only: start from Actions -> "Bench Baselines" -> Run workflow.
   workflow_dispatch:
 
 permissions:
@@ -71,7 +61,7 @@ jobs:
           # tighter threshold only produces noise. Warn at 2x, fail at 3x.
           alert-threshold: '200%'
           fail-threshold: '300%'
-          comment-on-alert: true
+          comment-on-alert: false
           fail-on-alert: ${{ github.event_name == 'push' }}
           alert-comment-cc-users: '@pinkysworld'
 
