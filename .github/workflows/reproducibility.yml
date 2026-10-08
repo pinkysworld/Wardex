@@ -16,9 +16,6 @@ on:
       - 'build.rs'
       - 'rust-toolchain.toml'
       - '.github/workflows/reproducibility.yml'
-  schedule:
-    # Weekly scheduled run — catches toolchain drift even when source is stable.
-    - cron: '17 4 * * 1'
   workflow_dispatch:
 
 permissions:

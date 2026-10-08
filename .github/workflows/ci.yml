@@ -6,8 +6,7 @@ on:
       - main
       - master
   pull_request:
-  schedule:
-    - cron: '0 4 * * 1'   # Nightly Monday 04:00 UTC
+  workflow_dispatch:
 
 env:
   CARGO_TERM_COLOR: always
@@ -310,7 +309,8 @@ jobs:
   # and `sdk-generation` jobs instead.
 
   fuzz:
-    if: github.event_name == 'schedule'
+    # Fuzzing runs only when CI is started manually (Actions -> CI -> Run workflow).
+    if: github.event_name == 'workflow_dispatch'
     runs-on: ubuntu-latest
     timeout-minutes: 45
     steps:

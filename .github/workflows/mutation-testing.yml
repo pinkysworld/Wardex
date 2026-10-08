@@ -1,6 +1,6 @@
 name: Mutation Testing
 
-# Nightly cargo-mutants advisory run against detection-critical modules.
+# On-demand cargo-mutants advisory run against detection-critical modules.
 #
 # Test count alone (1413 lib + 212 integration as of v0.53.9) does not measure
 # how much of that test code actually catches behavioural regressions. This
@@ -11,9 +11,7 @@ name: Mutation Testing
 # tightening tranche rather than gating PR merges.
 
 on:
-  schedule:
-    # Run twice a week at 03:30 UTC (Mon, Thu) — mutation testing is slow.
-    - cron: "30 3 * * 1,4"
+  # Manual only: mutation testing is slow; start it from Actions -> Run workflow.
   workflow_dispatch:
 
 concurrency:
