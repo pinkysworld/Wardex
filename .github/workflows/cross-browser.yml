@@ -1,18 +1,16 @@
 name: Cross-Browser Smoke
 
-# Nightly cross-browser Playwright smoke run against the admin console.
+# On-demand cross-browser Playwright smoke run against the admin console.
 #
 # The default `frontend` job in ci.yml only runs the chromium project so PR
 # turnaround stays fast. This workflow runs the same Playwright suite against
-# firefox and webkit on a schedule (and on demand via workflow_dispatch) so
+# firefox and webkit when started manually (workflow_dispatch) so
 # CSS / keyboard / web-platform regressions are caught before release.
 #
 # Failures here are surfaced as workflow alerts; they do not block PR merges.
 
 on:
-  schedule:
-    # Weekly, Monday 02:30 UTC.
-    - cron: "30 2 * * 1"
+  # Manual only: start from Actions -> Run workflow (e.g. before a release).
   workflow_dispatch:
 
 concurrency:
