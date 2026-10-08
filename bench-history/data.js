@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1791432364319,
+  "lastUpdate": 1791438805010,
   "repoUrl": "https://github.com/pinkysworld/Wardex",
   "entries": {
     "Wardex criterion benches": [
@@ -29519,6 +29519,114 @@ window.BENCHMARK_DATA = {
             "name": "sigma_evaluate_20_rules",
             "value": 35341,
             "range": "± 473",
+            "unit": "ns/iter"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "85413447+pinkysworld@users.noreply.github.com",
+            "name": "pinkysworld",
+            "username": "pinkysworld"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "9168c021f54dd6f9f0f05d674511001eb70ba2eb",
+          "message": "ci: run benches and cross-browser weekly, widen bench alert threshold (#160)\n\n* ci: run benches and cross-browser weekly, widen bench alert threshold\n\nDaily scheduled runs sent a nightly notification, and the 150% bench alert\nfired on shared-runner noise (detector_evaluate_single 452 -> 684 ns on a\ncommit that only touched a PowerShell release script).\n\n* ci: fix cross-browser schedule comment\n\n* fix(deps): bump source-map-js for GHSA-68fv-2mgg-jv7q",
+          "timestamp": "2026-10-08T07:41:52+02:00",
+          "tree_id": "6f9e2c9b5e6f67760919931feff75d49fca05437",
+          "url": "https://github.com/pinkysworld/Wardex/commit/9168c021f54dd6f9f0f05d674511001eb70ba2eb"
+        },
+        "date": 1791438804064,
+        "tool": "cargo",
+        "benches": [
+          {
+            "name": "full_pipeline/5",
+            "value": 50098,
+            "range": "± 876",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "full_pipeline/50",
+            "value": 415329,
+            "range": "± 2121",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "full_pipeline/200",
+            "value": 1890315,
+            "range": "± 49537",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "full_pipeline/1000",
+            "value": 17194454,
+            "range": "± 158619",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "detector_evaluate_single",
+            "value": 701,
+            "range": "± 1",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "detector_window_stream_256",
+            "value": 873005,
+            "range": "± 5430",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "shared_storage_observed_schema_read",
+            "value": 126,
+            "range": "± 0",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "shared_storage_4_threads_64_alerts",
+            "value": 163907,
+            "range": "± 2188",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "policy_evaluate_single",
+            "value": 237,
+            "range": "± 2",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "throughput/1000_samples",
+            "value": 17258285,
+            "range": "± 116288",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "search_500_events",
+            "value": 11443342,
+            "range": "± 182436",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "hunt_field_query",
+            "value": 2258039,
+            "range": "± 69859",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "ml_triage_rf",
+            "value": 54,
+            "range": "± 0",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "sigma_evaluate_20_rules",
+            "value": 35265,
+            "range": "± 868",
             "unit": "ns/iter"
           }
         ]
