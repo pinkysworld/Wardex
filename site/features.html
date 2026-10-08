@@ -104,12 +104,12 @@
                 <p>Per-host baselines with EWMA drift tracking. Gradual behavioural changes elevate risk scores without triggering noise on every short spike.</p>
               </div>
               <div class="feature-cell">
-                <h3>YARA Malware Scanning</h3>
-                <p>Embedded YARA engine scans executables, scripts, and memory regions against a curated malware signature database with hot-reload support.</p>
+                <h3>YARA Rule Compiler</h3>
+                <p>A native compiler for <code>.yar</code> rules covering a documented subset of YARA syntax, alongside the JSON rule format. Scan files and scripts against your own signature packs with hot reload.</p>
               </div>
               <div class="feature-cell">
                 <h3>Kernel Event Bridge</h3>
-                <p>Process creation, file writes, DNS queries, and network connections flow through a unified schema on Linux (kernel event streams via process connector and fanotify), Windows (a real-time ETW consumer, requires an elevated agent process), and macOS (Endpoint Security Framework, opt-in build feature requiring Apple's entitlement). Every platform falls back to polling collection, and reports which mode is active, when the required privilege or entitlement isn't available.</p>
+                <p>Process creation, file writes, DNS queries, and network connections flow through a unified schema on Linux (<code>CN_PROC</code> netlink process events plus fanotify/inotify file activity, with a <code>/proc</code> fallback), Windows (a real-time ETW consumer, requires an elevated agent process), and macOS (Endpoint Security Framework, opt-in build feature requiring Apple's entitlement). Every platform falls back to polling collection, and reports which mode is active, when the required privilege or entitlement isn't available. eBPF is not implemented; the macOS client is not exercised in CI.</p>
               </div>
               <div class="feature-cell">
                 <h3>MITRE ATT&amp;CK Coverage</h3>
@@ -250,14 +250,14 @@
                 <div class="analytics-num">05</div>
                 <div>
                   <h3>Federated Learning Convergence</h3>
-                  <p>Train global detection models across distributed agents without centralising sensitive data. Multi-round averaging converges to accuracy thresholds automatically.</p>
+                  <p>A coordinator/participant protocol for cross-agent federated averaging. Per-round gradient clipping and calibrated Gaussian noise add differential privacy, so raw telemetry never leaves the agent.</p>
                 </div>
               </div>
               <div class="analytics-item">
                 <div class="analytics-num">06</div>
                 <div>
                   <h3>ML Triage Assist</h3>
-                  <p>Per-alert feature vectors feed into a gradient-boosted triage classifier — shadowed by a Random Forest — that surfaces the incidents most likely to be real.</p>
+                  <p>A Random Forest (CART trees, bootstrap sampling, out-of-bag evaluation) is trained from analyst-labelled alert feedback and ranks the incidents most likely to be real.</p>
                 </div>
               </div>
             </div>
@@ -402,7 +402,7 @@
               </div>
               <div class="feature-cell">
                 <h3>WASM Extensions</h3>
-                <p>Write custom detectors and response handlers in any language that compiles to WebAssembly. Sandboxed execution with explicit capability grants.</p>
+                <p>Run third-party detectors and handlers compiled to WebAssembly in a sandboxed <code>wasmi</code> interpreter: fuel-metered, no JIT, with a versioned host ABI and explicit capability grants.</p>
               </div>
               <div class="feature-cell">
                 <h3>Python &amp; TypeScript SDKs</h3>
@@ -441,34 +441,37 @@
         <div class="container">
           <div class="footer-grid">
             <div class="footer-col footer-about">
-              <span class="nav-logo footer-logo">WX</span>
-              <p>Private-cloud XDR &amp; SIEM built in Rust. One binary. Full data sovereignty.</p>
-              <p class="footer-version"><span id="footer-version">v1.0.27</span> · AGPL 3.0</p>
+              <span class="nav-logo footer-logo" aria-hidden="true">WX</span>
+              <p>Private-cloud XDR &amp; SIEM built in Rust. One signed binary, full data sovereignty, verifiable supply chain.</p>
+              <p class="footer-version"><span id="footer-version">v1.1.0</span> · AGPL-3.0 or commercial licence</p>
             </div>
-            <div class="footer-col">
-              <h3>Product</h3>
+            <nav class="footer-col" aria-label="Product">
+              <h2 class="footer-heading">Product</h2>
               <a href="features.html">Features</a>
               <a href="architecture.html">Architecture</a>
+              <a href="integrations.html">Integrations</a>
+              <a href="comparison.html">Comparison</a>
               <a href="pricing.html">Pricing</a>
-              <a href="https://github.com/pinkysworld/Wardex/releases" target="_blank" rel="noopener">Releases</a>
-            </div>
-            <div class="footer-col">
-              <h3>Resources</h3>
+            </nav>
+            <nav class="footer-col" aria-label="Resources">
+              <h2 class="footer-heading">Resources</h2>
               <a href="resources.html">Documentation</a>
-              <a href="https://github.com/pinkysworld/Wardex/blob/main/docs/openapi.yaml" target="_blank" rel="noopener">OpenAPI</a>
-              <a href="https://github.com/pinkysworld/Wardex/blob/main/docs/SDK_GUIDE.md" target="_blank" rel="noopener">SDK Guide</a>
-              <a href="https://github.com/pinkysworld/Wardex/blob/main/docs/THREAT_MODEL.md" target="_blank" rel="noopener">Threat Model</a>
-            </div>
-            <div class="footer-col">
-              <h3>Project</h3>
+              <a href="api.html">API Reference</a>
+              <a href="rules.html">Detection Rules</a>
+              <a href="changelog.html">Changelog</a>
+              <a href="status.html">Release Status</a>
+            </nav>
+            <nav class="footer-col" aria-label="Project">
+              <h2 class="footer-heading">Project</h2>
               <a href="https://github.com/pinkysworld/Wardex" target="_blank" rel="noopener">GitHub</a>
+              <a href="https://github.com/pinkysworld/Wardex/releases" target="_blank" rel="noopener">Releases</a>
               <a href="support/">Support</a>
-              <a href="https://github.com/pinkysworld/Wardex/blob/main/SECURITY.md" target="_blank" rel="noopener">Security</a>
-              <a href="mailto:support@wardex.dev">Contact</a>
-            </div>
+              <a href="https://github.com/pinkysworld/Wardex/blob/main/SECURITY.md" target="_blank" rel="noopener">Security Policy</a>
+              <a href="mailto:support@wardex.dev">support@wardex.dev</a>
+            </nav>
           </div>
           <div class="footer-bottom">
-            <p>Wardex · © 2024–2026 · <a href="../LICENSE" style="color:inherit;">AGPL 3.0</a> · Commercial production use requires a <a href="pricing.html" style="color: var(--nav-accent);">separate license</a>.</p>
+            <p>Wardex · © 2024–2026 · <a href="https://github.com/pinkysworld/Wardex/blob/main/LICENSE" target="_blank" rel="noopener">AGPL 3.0</a> · Commercial production use requires a <a href="pricing.html">separate licence</a>.</p>
           </div>
         </div>
       </footer>
