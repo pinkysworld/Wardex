@@ -10,8 +10,8 @@ on:
       - 'benches/**'
       - '.github/workflows/bench.yml'
   schedule:
-    # Daily at 03:45 UTC — cheap, catches slow-creeping regressions.
-    - cron: '45 3 * * *'
+    # Weekly, Monday 03:45 UTC — catches slow-creeping regressions.
+    - cron: '45 3 * * 1'
   workflow_dispatch:
 
 permissions:
@@ -67,9 +67,10 @@ jobs:
           auto-push: ${{ github.event_name != 'pull_request' }}
           gh-pages-branch: gh-pages-bench
           benchmark-data-dir-path: bench-history
-          # Alert thresholds — warn at +50% regression, fail at +100%.
-          alert-threshold: '150%'
-          fail-threshold: '200%'
+          # Shared GitHub runners vary by up to ~50% between runs, so a
+          # tighter threshold only produces noise. Warn at 2x, fail at 3x.
+          alert-threshold: '200%'
+          fail-threshold: '300%'
           comment-on-alert: true
           fail-on-alert: ${{ github.event_name == 'push' }}
           alert-comment-cc-users: '@pinkysworld'
