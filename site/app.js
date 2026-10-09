@@ -455,7 +455,11 @@ function initScrollReveal() {
     });
   }, { threshold: 0, rootMargin: "0px 0px 120px 0px" });
 
+  const foldLimit = window.innerHeight + 120;
   targets.forEach((target) => {
+    // Content already on screen at load renders immediately: no fade, so
+    // nothing in the first viewport is ever painted at partial opacity.
+    if (target.getBoundingClientRect().top < foldLimit) return;
     target.classList.add("reveal");
     const siblings = target.parentElement ? target.parentElement.querySelectorAll(":scope > .reveal") : [];
     if (siblings.length > 1) {

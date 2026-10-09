@@ -75,39 +75,34 @@
         <div class="container">
           <div class="hero-grid">
             <div class="hero-text">
-              <p class="label">Private-Cloud XDR &amp; SIEM · Built in Rust</p>
+              <p class="hero-eyebrow"><a class="release-pill" href="#whats-new"><span class="release-pill-tag">v1.1.0</span><span>Real kernel telemetry, Tantivy search, WASM extensions</span></a></p>
               <h1>Security operations you actually own.</h1>
               <p class="hero-subtitle">
-                Detection, investigation, threat hunting, fleet operations, governance, and recovery-readiness visibility — delivered as a single signed Rust binary. No cloud dependency. No vendor lock-in. No telemetry egress unless you enable it.
+                Wardex is a private-cloud XDR and SIEM built in Rust. Detection, investigation, threat hunting, fleet operations and governance ship as one signed binary &mdash; on your infrastructure, with no telemetry egress unless you enable it.
               </p>
               <div class="hero-cta">
-                <a href="features.html" class="btn btn-primary">Explore Features</a>
-                <a href="architecture.html" class="btn btn-outline">See the Architecture</a>
+                <a href="https://github.com/pinkysworld/Wardex/releases" class="btn btn-primary" target="_blank" rel="noopener">Download v1.1.0</a>
+                <a href="features.html" class="btn btn-outline">Explore features</a>
               </div>
-              <p class="hero-release-link"><a href="https://github.com/pinkysworld/Wardex/releases" target="_blank" rel="noopener">Download the latest release →</a></p>
-              <div class="terminal-snippet">
-                <span class="terminal-prompt">$</span>
-                <code>curl -sSfL https://pinkysworld.github.io/Wardex/install.sh | bash</code>
-              </div>
-              <div class="trust-row">
-                <span class="trust-chip"><span class="trust-dot"></span>SLSA provenance</span>
-                <span class="trust-chip"><span class="trust-dot"></span>Cosign-signed images</span>
-                <span class="trust-chip"><span class="trust-dot"></span>CycloneDX SBOM</span>
-                <span class="trust-chip"><span class="trust-dot"></span>Secret-scanned CI</span>
-              </div>
+              <ul class="trust-row" aria-label="Release trust">
+                <li class="trust-chip"><span class="trust-dot" aria-hidden="true"></span>Signed releases</li>
+                <li class="trust-chip"><span class="trust-dot" aria-hidden="true"></span>SLSA provenance</li>
+                <li class="trust-chip"><span class="trust-dot" aria-hidden="true"></span>CycloneDX SBOM</li>
+                <li class="trust-chip"><span class="trust-dot" aria-hidden="true"></span>AGPL 3.0 source</li>
+              </ul>
             </div>
 
             <aside class="hero-aside">
               <div class="console-preview">
                 <div class="console-chrome"><span></span><span></span><span></span></div>
-                <pre class="console-output"><span class="c-dim">$</span> wardex serve
+                <pre class="console-output" aria-label="Example terminal output of wardex start"><span class="c-dim">$</span> wardex start
 
 <span class="c-label">control plane</span>  listening on :8080
 <span class="c-label">agents</span>         47 healthy · 2 degraded
 <span class="c-label">detection</span>      412 rules active · 18 hunts scheduled
 <span class="c-label">queue</span>          3 alerts · SLA nominal
 
-<span class="c-ok">✓</span> SOC ready — open https://localhost:8080</pre>
+<span class="c-ok">ok</span> SOC ready — open https://localhost:8080</pre>
               </div>
             </aside>
           </div>
@@ -150,6 +145,68 @@
         </div>
       </section>
 
+      <!-- ── What's new ─────────────────────────────────────────────────── -->
+      <section class="section" id="whats-new" aria-labelledby="whats-new-title">
+        <div class="container">
+          <div class="section-header">
+            <p class="label">New in v1.1.0</p>
+            <h2 id="whats-new-title">Documented capabilities, now real implementations.</h2>
+            <p class="section-desc">
+              v1.1.0 replaces placeholders with working engines and hardens them after a full code review. Where a capability depends on platform privileges, we say so.
+            </p>
+          </div>
+          <div class="capability-grid">
+            <article class="capability-card">
+              <div class="capability-icon" aria-hidden="true"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="4" width="16" height="16" rx="2"/><path d="M9 9h6v6H9zM9 1v3M15 1v3M9 20v3M15 20v3M20 9h3M20 14h3M1 9h3M1 14h3"/></svg></div>
+              <h3>Kernel telemetry</h3>
+              <p>Linux <code>CN_PROC</code> netlink process events and fanotify/inotify file activity, a Windows ETW consumer, and an opt-in macOS Endpoint Security client &mdash; with polling fallback.</p>
+            </article>
+            <article class="capability-card">
+              <div class="capability-icon" aria-hidden="true"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="7"/><path d="m21 21-4.3-4.3"/></svg></div>
+              <h3>Tantivy full-text search</h3>
+              <p><code>/api/search</code> and <code>/api/hunt</code> run on a real Tantivy index instead of an in-memory re-scan.</p>
+            </article>
+            <article class="capability-card">
+              <div class="capability-icon" aria-hidden="true"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 4h16v16H4z"/><path d="M8 9h8M8 13h5"/></svg></div>
+              <h3>YARA rule compiler</h3>
+              <p>A native <code>.yar</code> compiler for a documented subset of YARA syntax, alongside the existing JSON rule format.</p>
+            </article>
+            <article class="capability-card">
+              <div class="capability-icon" aria-hidden="true"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3v18M5 8l7-5 7 5M5 16l7 5 7-5"/></svg></div>
+              <h3>Learned triage</h3>
+              <p>Random Forest triage (CART, bootstrap, out-of-bag evaluation) trained from analyst feedback, plus federated averaging with differential privacy.</p>
+            </article>
+            <article class="capability-card">
+              <div class="capability-icon" aria-hidden="true"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2 3 7v10l9 5 9-5V7z"/><path d="M3 7l9 5 9-5M12 12v10"/></svg></div>
+              <h3>WASM extensions</h3>
+              <p>Sandboxed third-party extensions on <code>wasmi</code>: fuel-metered, no JIT, versioned host ABI.</p>
+            </article>
+            <article class="capability-card">
+              <div class="capability-icon" aria-hidden="true"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10 13a5 5 0 0 0 7.5.5l3-3a5 5 0 0 0-7-7l-1.7 1.7"/><path d="M14 11a5 5 0 0 0-7.5-.5l-3 3a5 5 0 0 0 7 7l1.7-1.7"/></svg></div>
+              <h3>Integrations</h3>
+              <p>VirusTotal and AbuseIPDB enrichment, bidirectional Jira and ServiceNow ticketing, OTLP export, SMTP STARTTLS, Okta polling, Docker/Podman and Kubernetes event sources.</p>
+            </article>
+          </div>
+          <div class="support-matrix-wrap">
+            <table class="support-matrix">
+              <caption>Endpoint telemetry by platform in v1.1.0</caption>
+              <thead>
+                <tr><th scope="col">Platform</th><th scope="col">Primary source</th><th scope="col">Verification status</th></tr>
+              </thead>
+              <tbody>
+                <tr><th scope="row">Linux</th><td><code>CN_PROC</code> netlink + fanotify/inotify, <code>/proc</code> fallback</td><td><span class="status-tag status-tag-ok">CI-tested</span></td></tr>
+                <tr><th scope="row">Windows</th><td>ETW consumer (requires an elevated agent), polling fallback</td><td><span class="status-tag status-tag-warn">Not yet exercised on an elevated host</span></td></tr>
+                <tr><th scope="row">macOS</th><td>Endpoint Security behind the opt-in <code>macos-es</code> feature (Apple entitlement required)</td><td><span class="status-tag status-tag-warn">Not CI-verified</span></td></tr>
+                <tr><th scope="row">eBPF</th><td>Not implemented</td><td><span class="status-tag">Not available</span></td></tr>
+              </tbody>
+            </table>
+          </div>
+          <div class="section-cta">
+            <a href="changelog.html#v1.1.0" class="btn btn-outline">Read the v1.1.0 changelog</a>
+          </div>
+        </div>
+      </section>
+
       <!-- ── Capability Teaser ────────────────────────────────────────────── -->
       <section class="section">
         <div class="container">
@@ -166,7 +223,7 @@
                 <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2v4M12 18v4M4.93 4.93l2.83 2.83M16.24 16.24l2.83 2.83M2 12h4M18 12h4M4.93 19.07l2.83-2.83M16.24 7.76l2.83-2.83"/></svg>
               </div>
               <h3>Real-Time Detection</h3>
-              <p>Adaptive scoring, Sigma rules, YARA scanning, side-channel fusion, and kernel-level event bridging work together out of the box.</p>
+              <p>Adaptive scoring, Sigma rules, compiled YARA rules, and kernel event telemetry feed a single per-event risk assessment.</p>
             </div>
             <div class="capability-card">
               <div class="capability-icon">
@@ -331,7 +388,8 @@
         <div class="container">
           <div class="section-header">
             <p class="label">By the Numbers</p>
-            <h2>Ship-ready, today.</h2>
+            <h2>Measured, not marketed.</h2>
+            <p class="section-desc">Counts are generated from the v1.1.0 source tree and test suites.</p>
           </div>
           <div class="stat-strip" id="stat-strip"></div>
         </div>
@@ -345,12 +403,13 @@
               <p class="label">Deploy Anywhere</p>
               <h2>Linux. macOS. Windows. Air-gapped.</h2>
               <p class="section-desc">
-                Ship a single binary with systemd, launchd, or Windows Service integration. Package as Debian and Homebrew artifacts straight from CI, or roll your own Helm chart for Kubernetes.
+                Run a single binary under systemd, launchd, or as a Windows Service. Every channel below is published from the same signed release pipeline.
               </p>
               <ul class="check-list">
-                <li>Debian packages with signed APT repository</li>
+                <li>GitHub release archives with checksums, SBOM and provenance</li>
+                <li>Signed APT repository and RPM packages</li>
                 <li>Homebrew tap for macOS and Linux</li>
-                <li>Signed container images with cosign</li>
+                <li>Cosign-signed container image on GHCR</li>
                 <li>Helm chart for Kubernetes rollouts</li>
                 <li>Auto-update with SHA-256 verification and atomic rollback</li>
               </ul>
@@ -370,7 +429,7 @@
 <span class="c-dim"># Kubernetes</span>
 <span class="c-label">$</span> helm install wardex ./deploy/helm/wardex
 
-<span class="c-ok">✓</span> ready to serve</pre>
+<span class="c-ok">ok</span> ready to serve</pre>
             </div>
           </div>
         </div>
@@ -396,34 +455,37 @@
         <div class="container">
           <div class="footer-grid">
             <div class="footer-col footer-about">
-              <span class="nav-logo footer-logo">WX</span>
-              <p>Private-cloud XDR &amp; SIEM built in Rust. One binary. Full data sovereignty. Verifiable supply chain.</p>
-              <p class="footer-version"><span id="footer-version">v1.0.27</span> · AGPL 3.0</p>
+              <span class="nav-logo footer-logo" aria-hidden="true">WX</span>
+              <p>Private-cloud XDR &amp; SIEM built in Rust. One signed binary, full data sovereignty, verifiable supply chain.</p>
+              <p class="footer-version"><span id="footer-version">v1.1.0</span> · AGPL-3.0 or commercial licence</p>
             </div>
-            <div class="footer-col">
-              <h3>Product</h3>
+            <nav class="footer-col" aria-label="Product">
+              <h2 class="footer-heading">Product</h2>
               <a href="features.html">Features</a>
               <a href="architecture.html">Architecture</a>
+              <a href="integrations.html">Integrations</a>
+              <a href="comparison.html">Comparison</a>
               <a href="pricing.html">Pricing</a>
-              <a href="https://github.com/pinkysworld/Wardex/releases" target="_blank" rel="noopener">Releases</a>
-            </div>
-            <div class="footer-col">
-              <h3>Resources</h3>
+            </nav>
+            <nav class="footer-col" aria-label="Resources">
+              <h2 class="footer-heading">Resources</h2>
               <a href="resources.html">Documentation</a>
-              <a href="https://github.com/pinkysworld/Wardex/blob/main/docs/openapi.yaml" target="_blank" rel="noopener">OpenAPI</a>
-              <a href="https://github.com/pinkysworld/Wardex/blob/main/docs/SDK_GUIDE.md" target="_blank" rel="noopener">SDK Guide</a>
-              <a href="https://github.com/pinkysworld/Wardex/blob/main/docs/THREAT_MODEL.md" target="_blank" rel="noopener">Threat Model</a>
-            </div>
-            <div class="footer-col">
-              <h3>Project</h3>
+              <a href="api.html">API Reference</a>
+              <a href="rules.html">Detection Rules</a>
+              <a href="changelog.html">Changelog</a>
+              <a href="status.html">Release Status</a>
+            </nav>
+            <nav class="footer-col" aria-label="Project">
+              <h2 class="footer-heading">Project</h2>
               <a href="https://github.com/pinkysworld/Wardex" target="_blank" rel="noopener">GitHub</a>
+              <a href="https://github.com/pinkysworld/Wardex/releases" target="_blank" rel="noopener">Releases</a>
               <a href="support/">Support</a>
-              <a href="https://github.com/pinkysworld/Wardex/blob/main/SECURITY.md" target="_blank" rel="noopener">Security</a>
-              <a href="mailto:support@wardex.dev">Contact</a>
-            </div>
+              <a href="https://github.com/pinkysworld/Wardex/blob/main/SECURITY.md" target="_blank" rel="noopener">Security Policy</a>
+              <a href="mailto:support@wardex.dev">support@wardex.dev</a>
+            </nav>
           </div>
           <div class="footer-bottom">
-            <p>Wardex · © 2024–2026 · <a href="../LICENSE" style="color:inherit;">AGPL 3.0</a> · Commercial production use requires a <a href="pricing.html" style="color: var(--nav-accent);">separate license</a>.</p>
+            <p>Wardex · © 2024–2026 · <a href="https://github.com/pinkysworld/Wardex/blob/main/LICENSE" target="_blank" rel="noopener">AGPL 3.0</a> · Commercial production use requires a <a href="pricing.html">separate licence</a>.</p>
           </div>
         </div>
       </footer>

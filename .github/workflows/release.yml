@@ -207,6 +207,7 @@ jobs:
           name: ${{ matrix.archive }}
           path: ${{ matrix.archive }}
           if-no-files-found: error
+          retention-days: 3
 
       - name: Upload macOS Gatekeeper evidence
         if: startsWith(matrix.platform, 'macos-')
@@ -215,6 +216,7 @@ jobs:
           name: wardex-${{ matrix.platform }}-gatekeeper.txt
           path: wardex-${{ matrix.platform }}-gatekeeper.txt
           if-no-files-found: error
+          retention-days: 3
 
       # ── SLSA v1.0 provenance attestation ────────────────────────────────
       # Binds each release archive to the workflow run that produced it so
@@ -251,6 +253,7 @@ jobs:
         with:
           name: wardex-sbom.cdx.json
           path: wardex-sbom.cdx.json
+          retention-days: 3
 
   # ── Lint Helm chart ──────────────────────────────────────────────────
   helm-lint:
@@ -341,6 +344,7 @@ jobs:
           name: wardex-deb
           path: "*.deb"
           if-no-files-found: error
+          retention-days: 3
 
       - name: Upload rpm package
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
@@ -348,6 +352,7 @@ jobs:
           name: wardex-rpm
           path: "*.rpm"
           if-no-files-found: error
+          retention-days: 3
 
   # ── Install package smoke ─────────────────────────────────────────
   linux-package-smoke:

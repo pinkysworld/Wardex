@@ -101,7 +101,7 @@ jobs:
             pa11y-report.json
             .lighthouseci/
           if-no-files-found: ignore
-          retention-days: 14
+          retention-days: 7
 
       - name: Stop static server
         if: always()

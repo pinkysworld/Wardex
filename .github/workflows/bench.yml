@@ -73,4 +73,4 @@ jobs:
           path: |
             bench-output.txt
             target/criterion/
-          retention-days: 30
+          retention-days: 7
